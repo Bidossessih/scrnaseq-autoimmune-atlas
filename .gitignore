@@ -1,6 +1,7 @@
 # Large generated data
-./notebooks/data/*.csv
-./notebooks/notebooks.zip
+notebooks/data/*.csv
+notebooks/notebooks.zip
+notebooks/script_autoimmune.zip
 
 # Jupyter outputs
 .ipynb_checkpoints/*.h5ad

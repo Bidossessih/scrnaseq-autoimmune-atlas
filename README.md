@@ -26,7 +26,7 @@ notebooks/
 ├── 2-Integration/     Integration, annotation, and label transfer
 ├── 3-Milo/            Differential-abundance analysis
 ├── 4-R/               R and Quarto reporting workflows
-└── data/              Exported tables used by downstream analyses (See Zenodo 10.5281/zenodo.21514797)
+└── data/              Exported tables used by downstream analyses
 ```
 
 The notebooks are organized by analysis stage rather than as a single executable pipeline. Some notebooks are study-specific, and filenames containing `Copy`, numbered variants, or dates represent alternate analysis iterations.
@@ -46,7 +46,7 @@ The integration environment includes CUDA packages and is intended for a Linux s
 
 ## Data and reproducibility
 
-Large input datasets and intermediate objects are not included in this repository. The CSV files under `notebooks/data/` are exported analysis tables used by downstream notebooks; the `.gitignore` excludes these files and the bundled notebook archive from normal version control. Obtain the source datasets separately, place them where the relevant notebook expects them, and update paths locally rather than committing private or generated data.
+The input data and exported analysis tables are available from [Zenodo (10.5281/zenodo.21514797)](https://doi.org/10.5281/zenodo.21514797). Download the required files from Zenodo and place them where the relevant notebook expects them. The CSV files under `notebooks/data/` and the archive `./notebooks/script_autoimmune.zip` are ignored by Git because they are generated or distributed data files.
 
 Because this is a notebook-based research workflow, results depend on the selected study inputs, package versions, random seeds, GPU availability, and the order in which notebooks are run. Record any changed paths, parameters, environment details, and notebook outputs when creating a reproducible analysis run.
 
