@@ -1,0 +1,1165 @@
+---
+title: "Untitled"
+format: html
+editor: visual
+---
+
+## package loading
+
+```{r}
+rm(list = ls())
+```
+
+```{r}
+suppressPackageStartupMessages({
+  library(ggplot2)
+  library(tradeSeq)
+  library(RColorBrewer)
+  library(SingleCellExperiment)
+  library(slingshot)
+  library(ClusterGVis)
+  library(dplyr)
+  library(ComplexHeatmap)
+  library(circlize)
+})
+# For reproducibility
+RNGversion("3.5.0")
+palette(brewer.pal(8, "Dark2"))
+# data(countMatrix, package = "tradeSeq")
+# counts <- as.matrix(countMatrix)
+# rm(countMatrix)
+# data(crv, package = "tradeSeq")
+# data(celltype, package = "tradeSeq")
+```
+
+## Load initial data
+
+```{r}
+#load("C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/scripts/autoimmuneSC/Integrated/Trajectory/Trajectory_analysis_Mono_Macrophage_SlingShot.RData")
+#load("C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/scripts/autoimmuneSC/Integrated/Trajectory/Slingshot_trajetory_results_covar.RData")
+
+load("sce_with_nknots_6.RData")
+
+load("Slingshot_trajetory_Agosto_2025.RData")
+```
+
+```{r}
+#set.seed(5)
+#icMat <- evaluateK(sce, k = 3:10, nGenes = 200, verbose = T)
+```
+
+## Preprocess scVI denoised expression
+
+```{r}
+genes_interest = intersect(rownames(sce_nknots_6), c("C1QC", "CD83", "CTSL", "CXCL10", "CXCL2", "IFIT2", "IL1B", "MT1H", "S100A8", "S100A9", "TNF"))
+# test for dynamic expression
+ATres <- associationTest(sce_nknots_6)
+ATres <- ATres[ATres$pvalue < 0.05 & !is.na(ATres$pvalue), ] %>% arrange(desc(meanLogFC))
+topgenes <- unique(c(na.omit(rownames(ATres[order((ATres$meanLogFC)), ])[1:200]), genes_interest))
+pst.ord <- order(slingAvgPseudotime(sce), na.last = NA)
+
+all.equal(colnames(sce), colnames(sce_nknots_6))
+#heatdata <- assays(sce)$scaledata[topgenes, pst.ord]
+# sce_subset <- sce[, colnames(sce) %in% colnames(expression_matrix)]
+# all.equal(colnames(sce_subset), colnames(expression_matrix))
+# 
+# pst.ord <- order(slingAvgPseudotime(sce_subset), na.last = NA)
+# heatdata <- expression_matrix[topgenes, pst.ord]
+# heatclus <- sce$kmeans[pst.ord]
+# 
+# heatdata_m <- as.matrix(log1p(heatdata))
+
+library(readr)
+scvi_denoised_expression <- read_csv("scvi_denoised_expression.csv")
+colnames(scvi_denoised_expression)[1] <- "sample"
+scvi_denoised_expression <- tibble::column_to_rownames(scvi_denoised_expression, var = "sample")
+# denoised
+heatdata_dnsed <- t(scvi_denoised_expression)
+heatdata_dnsed <- heatdata_dnsed[topgenes,1:17381]
+#heatdata_m_dnsed <- as.matrix(log1p(heatdata_dnsed))
+
+#heatmap(heatdata_m, Colv = NA,
+ #       ColSideColors = brewer.pal(9,"Set1")[heatclus])
+```
+
+```{r}
+included_cells <- intersect(colnames(heatdata_dnsed), colnames(sce_nknots_6))
+
+ 
+i=0
+for (g in intersect(rownames(sce_nknots_6), genes_interest)) {
+  i=i+1
+  print(paste0("Plotting ", g))
+  p <- plotSmoothers(
+    models = sce_nknots_6[intersect(rownames(sce_nknots_6), genes_interest), included_cells],
+    counts = t(scvi_denoised_expression)[, 1:17381],
+    gene = g, lineagesToPlot = 1,
+    ylab = paste0("Log(expression + 1) of ", g)
+  )
+  
+  p <- ggplotify::as.ggplot(p)
+  print(p)
+  ggsave(paste0("./Plot/selected_genes/", i, "_smouthers_plot_", g, ".png"))
+  
+}
+```
+
+```{r}
+idx = c(3, 4, 6, 7, 9, 10:14, 16, 17, 22, 23, 28:31, 
+        33, 40, 42, 52, 55, 57:61, 63, 65, 66, 70, 79,
+        85, 92, 102, 103, 105, 107, 114, 116:119, 124:126, 
+        137:139, 141:144,147, 149, 155:157, 164,167, 169:171,173:178, 182:184, 
+        186, 187, 190, 191, 197:200,203:205, 2010, 211, 213, 214, 218, 221, 
+        231:233, 242, 260:262, 276, 284, 287, 297, 298, 305, 314, 320, 331,
+        345, 349, 355, 368, 370,380:384,387,402:406, 410, 411,
+        415, 420:422, 426,427, 434, 439:441)
+```
+
+```{r}
+# ComplexHeatmap::Heatmap(
+#     heatdata_dnsed,
+#     name = 'Z-score',
+#     cluster_rows = T,
+#     #col = col_fun,
+#     cluster_columns = F,
+#     show_row_dend = FALSE,
+#     #rect_gp = gpar(col = "white"),
+#     show_column_names = F,
+#     show_row_names = F,
+#     use_raster = TRUE
+    #top_annotation = ha,
+    #left_annotation = annotation_row,
+    # column_title_gp = gpar(fontsize = fontsize),
+    # column_gap = unit(2, "mm"),
+    # row_names_side = "left",
+    # width = ncol(heatmap_data) * unit(cell_factor, "mm"),
+    # row_names_gp = gpar(fontsize = fontsize),
+    # column_dend_height = unit(column_dend_height, "mm"),
+    # column_dend_gp = gpar(
+    #   lwd = 3,
+    #   col = "black",
+    #   fontsize = fontsize
+    # ),
+    # heatmap_legend_param = list(
+    #   title_gp = gpar(fontsize = fontsize, fontface = "bold"),
+    #   labels_gp = gpar(fontsize = fontsize),
+    #   title_gap = unit(title_gap, "cm"),
+    #   grid_height = unit(grid_width, "cm"),
+    #   grid_width = unit(grid_width, "cm")
+    # ),
+    # height = 50 * unit(cell_factor, "mm")
+  #)
+```
+
+## Heatmap visualization
+
+```{r}
+mat <- as.matrix(heatdata_dnsed[, 1:17381])
+
+attr(mat, "class") <- "matrix"
+class(mat)
+# Verificar NAs, NaNs e Infs
+sum(is.na(mat))
+
+#mat[!is.finite(mat)] <- 0
+#sum(is.na(mat))
+# Conferir se a matriz é toda numérica
+str(mat)
+
+
+ck <- clusterData(obj = mat,
+                  cluster.method = "kmeans", scaleData = T,
+                  cluster.num = 5)
+```
+
+```{r}
+heat_map_transformed <- ck$wide.res
+
+heat_map_transformed
+```
+
+```{r}
+
+# select the ptime values 
+ptime <- slingAvgPseudotime(sce)#$slingPseudotime_1
+
+# get cells in that lineage
+lineage_cells <- colnames(sce)[!is.na(ptime)]
+
+# remove values for cells not in the lineage
+ptime <- ptime[!is.na(ptime)]
+
+# just test variable genes to save some time
+#genes_to_test <- VariableFeatures(so)[1:1000]
+
+# get log normalized data to test
+#cnts <- logcounts(sce)[genes_to_test, lineage_cells]
+
+sce$slingPseudotimeAvg <- slingAvgPseudotime(sce)
+# add useful annotations
+phenoData_sce <- colData(sce)[lineage_cells, 
+                            c("slingPseudotimeAvg", 
+                            "Cell_type_scANVI",
+                            "dataset_id"#,
+                            )] %>% 
+  as.data.frame()
+
+#phenoData_sce <- phenoData_sce %>% filter(dataset_id == "GSE134809_Martin_et_al_2019")
+
+included_cells <- intersect(colnames(heat_map_transformed), rownames(phenoData_sce))
+
+phenoData_sce <- phenoData_sce[included_cells,] %>% 
+  arrange(slingPseudotimeAvg)
+
+heat_map_transformed <- heat_map_transformed[,rownames(phenoData_sce)]
+all.equal(rownames(phenoData_sce), colnames(heat_map_transformed))
+dim(heat_map_transformed)
+
+```
+
+# Parte 2
+
+```{r}
+color_cell = c(
+  cMon_1 = "#1f77b4",
+  cMon_2 = "#d62728",
+  Mon_SIRPA = "#1bbbbb",
+  "IL1B high macrophage" = "#A6CEE3",
+  "Mac S100A8 prod" = "#8c554a",
+  "Mac CX3CR1+" =  "#7D54A5"
+)
+
+phenoData_sce$Cell_type_scANVI <- case_when(
+  phenoData_sce$Cell_type_scANVI == "Intermediate macrophage" ~ "IL1B high macrophage",
+  TRUE ~ phenoData_sce$Cell_type_scANVI
+)
+
+clusters_df = plyr::ldply(ck$cluster.list, data.frame)
+colnames(clusters_df) = c("cluster", "genes")
+
+```
+
+```{r}
+plot_pseudotime_heatmap = function(heatmap_matrix,
+                                   gridwidth = 7,
+                                   phenoData = phenoData_sce,
+                                   clusters = clusters_df,
+                                   colormap_cell = color_cell,
+                                   fontsize = 18,
+                                   legend_font = 30,
+                                   legend_grid = 20,
+                                   legend_merging = TRUE,
+                                   legend_col = 2,
+                                   legend_row = 1,
+                                   subset = NULL) {
+  if(!is.null(subset)){
+    idx = sample(1:ncol(heatmap_matrix), subset)
+  } else {
+    idx = 1:ncol(heatmap_matrix)
+  }
+  
+  # Column annotation
+  ha_col <- HeatmapAnnotation(
+    df = data.frame(
+      pseudotime = phenoData$slingPseudotimeAvg[idx],
+      celltype = phenoData$Cell_type_scANVI[idx]
+    ),
+    which = "column",
+    col = list(
+      pseudotime = circlize::colorRamp2(c(
+        min(phenoData$slingPseudotimeAvg),
+        max(phenoData$slingPseudotimeAvg)
+      ),
+      c("#fff7ec", "tomato")),
+      celltype = colormap_cell
+    ),
+    simple_anno_size = unit(1, "cm"),
+    simple_anno_size_adjust = TRUE,
+    annotation_legend_param = list(
+      pseudotime = list(
+        title_gp = gpar(fontsize = legend_font, fontface = "bold"),
+        labels_gp = gpar(fontsize = legend_font),
+        grid_width = unit(legend_grid, "mm"),
+        grid_height = unit(legend_grid, "mm"),
+        # Move legend to bottom
+        legend_direction = "vertical",
+        legend_width = unit(6, "cm")
+      ),
+      celltype = list(
+        title_gp = gpar(fontsize = legend_font, fontface = "bold"),
+        labels_gp = gpar(fontsize = legend_font),
+        grid_width = unit(legend_grid, "mm"),
+        grid_height = unit(legend_grid, "mm"),
+        # Move legend to bottom
+        legend_direction = "vertical",
+        legend_width = unit(6, "cm")
+      )
+    )
+  )
+  
+  # Row annotation
+  geneidx = sample(1:nrow(heatmap_matrix), 15)
+  ha_row = rowAnnotation(foo = anno_mark(at = geneidx, 
+    labels = rownames(heatmap_matrix)[geneidx]))
+  
+  col_fun <- colorRamp2(c(-4, 0, 4), c("#08519C", "white", "#A50F15"))
+  
+  
+  heat_m = Heatmap(
+    heatmap_matrix[,idx],
+    col = col_fun,
+    cluster_rows = FALSE,
+    name = "Denoised expression",
+    rect_gp = gpar(col = "white"),
+    top_annotation = ha_col,
+    left_annotation = ha_row,
+    row_names_side = "left",
+    width = ncol(heatmap_matrix) * unit(gridwidth, "mm"),
+    row_names_gp = gpar(fontsize = fontsize),
+    column_dend_height = unit(column_dend_height, "mm"),
+    column_dend_gp = gpar(lwd = 4),
+    row_split = data.frame(clusters$cluster),
+    cluster_columns = FALSE,
+    show_row_dend = FALSE,
+    show_column_names = FALSE,
+    show_row_names = FALSE,
+    #use_raster = TRUE,
+    heatmap_legend_param = list(
+      title_gp = gpar(fontsize = legend_font, fontface = "bold"),
+      labels_gp = gpar(fontsize = legend_font),
+      # Change to horizontal orientation for bottom placement
+      legend_direction = "horizontal",
+      legend_height = unit(1, "cm"),
+      legend_width = unit(16, "cm"),
+      grid_width = unit(legend_grid, "mm"),
+      title_gap = unit(3, "mm"),
+      ncol = legend_col,
+      nrow = legend_row
+    ),
+    height = nrow(heatmap_matrix) * unit(gridwidth, "mm")
+  )
+  
+  # # Convert to ggplot first, then draw with bottom legends
+  # heat_m_gg = ggplotify::as.ggplot(function() {
+  #   draw(
+  #     heat_m,
+  #     heatmap_legend_side = "bottom",
+  #     annotation_legend_side = "bottom",
+  #     merge_legend = legend_merging
+  #   )
+  # })
+  # 
+  # return(heat_m_gg)
+  heat_m
+}
+```
+
+```{r}
+# rm(seur, counts, heat_map_transformed, heatdata_dnsed, sce, sce_nknots_6)
+# gc()
+```
+
+## Heatmap top 200
+
+```{r}
+# heatmap_top_200 <- plot_pseudotime_heatmap(heatmap_matrix = mat[topgenes, ],
+#                                    gridwidth = 7,
+#                                    phenoData = phenoData_sce,
+#                                    clusters = clusters_df,
+#                                    colormap_cell = color_cell,
+#                                    fontsize = 18,
+#                                    legend_font = 30,
+#                                    legend_grid = 20,
+#                                    legend_merging = TRUE,
+#                                    legend_col = 2,
+#                                    legend_row = 1,
+#                                    subset = NULL)
+# 
+# 
+# ggplotify::as.ggplot(function() {
+#     print(
+#       heatmap_top_200
+#     )
+#   })
+#   
+# ggplot2::ggsave("Heatmap_slingshot_agosta_2025_top_200_custom.svg", limitsize = FALSE)
+
+
+```
+
+```{r}
+fontsize = 18
+legend_font = 30
+legend_grid = 20
+legend_merging = TRUE
+legend_col = 2
+legend_row = 1
+
+ha_col <- HeatmapAnnotation(
+    pseudotime = phenoData_sce$slingPseudotimeAvg,
+      celltype = phenoData_sce$Cell_type_scANVI,
+    which = "column",
+    col = list(
+      pseudotime = circlize::colorRamp2(c(
+        min(phenoData_sce$slingPseudotimeAvg),
+        max(phenoData_sce$slingPseudotimeAvg)
+      ),
+      c("#fff7ec", "tomato")),
+      celltype = color_cell
+    ),
+    # simple_anno_size = unit(1, "cm"),
+    # simple_anno_size_adjust = TRUE,
+    annotation_legend_param = list(
+      pseudotime = list(
+        #title_gp = gpar(fontsize = legend_font, fontface = "bold"),
+        #labels_gp = gpar(fontsize = legend_font)
+        # grid_width = unit(legend_grid, "mm"),
+        # grid_height = unit(legend_grid, "mm"),
+        # Move legend to bottom
+        legend_direction = "vertical"
+        # legend_width = unit(6, "cm")
+      ),
+      celltype = list(
+        #title_gp = gpar(fontsize = legend_font, fontface = "bold"),
+        #labels_gp = gpar(fontsize = legend_font)
+        # grid_width = unit(legend_grid, "mm"),
+        # grid_height = unit(legend_grid, "mm"),
+        # # Move legend to bottom
+         legend_direction = "vertical"
+        # legend_width = unit(6, "cm")
+      )
+    )
+  )
+```
+
+```{r}
+protein_class_Transcription <- read.delim("C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/scripts/autoimmuneSC/Integrated/Trajectory/scVI_2025/protein_class_Transcription.tsv")
+
+markGenes = protein_class_Transcription[protein_class_Transcription$Gene %in% rownames(heat_map_transformed),]
+
+interesting_markers = c("DEAF1", "FOXO3", "ELK1", "ELK3", "JUNB",
+                        "JUND", "KAT8", "MAX", "NFKB2", "PHF5A",
+                        "PLAGL1", "RBPJ", "TFDP1", "TGIF2", "YBX3",
+                        "ZNF28", "ZNF302", "ZNF568", "ZNF605",
+                        "ZNF669", "ZSCAN9", "ZNF90")
+
+markGenes_C6 = protein_class_Transcription[protein_class_Transcription$Gene %in% clusters_df$genes[clusters_df$cluster=="C6"],]
+```
+
+```{r width = 10}
+
+vis_heatmap = visCluster(object = ck,
+           plot.type = "heatmap",
+           #column_names_rot = 45,
+           markGenes = genes_interest,#unique(c(interesting_markers, "NFKBIL1", "PHF5A", "ZNF32")),
+           show_row_dend = F,
+           #ht.col = list(col_range = c(-4, 0, 4),col_color = c("#08519C", "white", "#A50F15")),
+           cluster.order = c(1:3, 5, 4),
+           HeatmapAnnotation = ha_col,
+           row_gap = unit(0, "mm"),
+           border = FALSE
+           )
+
+ggplotify::as.ggplot(function() {
+    draw(
+      vis_heatmap,
+      heatmap_legend_side = "bottom",
+      annotation_legend_side = "bottom",
+      merge_legend = TRUE
+    )
+  })
+  
+ggplot2::ggsave("Heatmap_slingshot_agosta_2025_nknot_6_all_markers.svg", limitsize = FALSE)
+
+```
+
+```{r}
+i=0
+for (g in ck[["cluster.list"]]$C4) {
+  i=i+1
+  print(paste0("Plotting ", g))
+  p <- plotSmoothers(
+    models = sce_nknots_6[, included_cells],
+    counts = t(scvi_denoised_expression)[, 1:17381],
+    gene = g, lineagesToPlot = 1,
+    ylab = paste0("Log(expression + 1) of ", g)
+  )
+  
+  p <- ggplotify::as.ggplot(p)
+  print(p)
+  ggsave(paste0("./Plot/selected_genes/", i, "_smouthers_plot_Cluster_4_", g, ".png"))
+  
+}
+```
+
+```{r}
+library(org.Hs.eg.db)
+# GO enrich for clusters
+enrich.go <- enrichCluster(object = ck,
+                           OrgDb = org.Hs.eg.db,
+                           type = "BP",
+                           pvalueCutoff = 0.05,
+                           topn = 5,
+                           seed = 5201314)
+
+# check
+head(enrich.go,3)
+
+#            group                       Description       pvalue     ratio
+# GO:0044282    C1  small molecule catabolic process 3.376035e-32 10.683761
+# GO:0046395    C1 carboxylic acid catabolic process 8.123713e-20  6.623932
+# GO:0016054    C1    organic acid catabolic process 1.057149e-19  6.623932
+
+# KEGG enrich for clusters
+enrich.kegg <- enrichCluster(object = ck,
+                             OrgDb = org.Hs.eg.db,
+                             type = "KEGG",
+                             organism = "hsa",
+                             pvalueCutoff = 0.05,
+                             topn = 5,
+                             seed = 5201314)
+
+# check
+head(enrich.kegg,3)
+
+enrich.reactome <- enrichCluster(object = ck,
+                             OrgDb = org.Hs.eg.db,
+                             type = "REACTOME",
+                             organism = "hsa",
+                             pvalueCutoff = 0.05,
+                             topn = 10,
+                             seed = 5201314)
+
+# check
+head(enrich.reactome,3)
+```
+
+```{r}
+vis_heatmap = visCluster(object = ck,
+           plot.type = "heatmap",
+           #column_names_rot = 45,
+           #markGenes = unique(c(interesting_markers, "NFKBIL1", "PHF5A", "ZNF32")),
+           show_row_dend = F,
+           #ht.col = list(col_range = c(-4, 0, 4),col_color = c("#08519C", "white", "#A50F15")),
+           cluster.order = c(2, 1, 5, 3, 4),
+           HeatmapAnnotation = ha_col,
+           row_gap = unit(0, "mm"),
+           border = FALSE
+           )
+```
+
+```{r}
+vis_heatmap_kegg = visCluster(object = ck,
+           #plot.type = "both",
+           column_names_rot = 45,
+           show_row_dend = F,
+           cluster.order = c(2, 1, 5, 3, 4),
+           HeatmapAnnotation = ha_col,
+           row_gap = unit(0, "mm"),
+           border = FALSE,
+           #markGenes = markGenes,
+           #markGenes.side = "left",
+           #annoTerm.data = enrich.kegg,
+           #go.col = rep(jjAnno::useMyCol("calm",n = 6),each = 5),
+           annoKegg.data = enrich.kegg,
+           #kegg.col = rep(jjAnno::useMyCol("stallion",n = 6),each = 5),
+           #line.side = "left"
+           )
+
+vis_heatmap_kegg
+```
+
+## Only selected genes based on
+
+```{r}
+gene_selected = na.omit(topgenes[idx]) 
+mat_sel <- mat[gene_selected, ]
+
+attr(mat_sel, "class") <- "matrix"
+class(mat_sel)
+# Verificar NAs, NaNs e Infs
+sum(is.na(mat_sel))
+
+ck_sel <- clusterData(obj = mat_sel,
+                  cluster.method = "kmeans",
+                  cluster.num = 5)
+```
+
+```{r }
+
+vis_heatmap_sel = visCluster(object = ck_sel,
+           plot.type = "heatmap",
+           #column_names_rot = 45,
+           #markGenes = unique(c(interesting_markers, "NFKBIL1", "PHF5A", "ZNF32")),
+           show_row_dend = F,
+           ht.col = list(col_range = c(-4, 0, 4),col_color = c("#08519C", "white", "#A50F15")),
+           HeatmapAnnotation = ha_col,
+           row_gap = unit(0, "mm"),
+           border = FALSE,
+           bar.width = 4,
+           raster_resize_mat = max
+           )
+
+ggplotify::as.ggplot(function() {
+    draw(
+      vis_heatmap_sel,
+      heatmap_legend_side = "bottom",
+      annotation_legend_side = "bottom",
+      merge_legend = TRUE
+    )
+  })
+  
+
+
+```
+
+## Top 1000
+
+```{r}
+# test for dynamic expression
+top1000genes <- na.omit(rownames(ATres[order((ATres$meanLogFC)), ])[1:1000])
+heatdata_dnsed_1000 <- t(scvi_denoised_expression)
+heatdata_dnsed_1000 <- heatdata_dnsed_1000[top1000genes,1:17381]
+#heatdata_m_dnsed <- as.matrix(log1p(heatdata_dnsed))
+
+#heatmap(heatdata_m, Colv = NA,
+ #       ColSideColors = brewer.pal(9,"Set1")[heatclus])
+```
+
+```{r}
+mat_sel_1000 <- as.matrix(heatdata_dnsed_1000[, 1:17381])
+
+attr(mat_sel_1000, "class") <- "matrix"
+
+ck_sel_1000 <- clusterData(obj = mat_sel_1000,
+                  cluster.method = "kmeans",
+                  cluster.num = 5)
+```
+### Figure
+
+```{r }
+
+vis_heatmap_sel_1000 = visCluster(object = ck_sel_1000,
+           plot.type = "heatmap",
+           #column_names_rot = 45,
+           #markGenes = unique(c(interesting_markers, "NFKBIL1", "PHF5A", "ZNF32")),
+           show_row_dend = F,
+           ht.col = list(col_range = c(-4, 0, 4),col_color = c("#08519C", "white", "#A50F15")),
+           HeatmapAnnotation = ha_col,
+           row_gap = unit(0, "mm"),
+           border = FALSE,
+           bar.width = 4
+           )
+
+ggplotify::as.ggplot(function() {
+    draw(
+      vis_heatmap_sel_1000,
+      heatmap_legend_side = "bottom",
+      annotation_legend_side = "bottom",
+      merge_legend = TRUE
+    )
+  })
+  
+
+
+```
+
+## Only TF
+
+```{r}
+mat_tf <- as.matrix(heatdata_dnsed[unique(markGenes$Gene), 1:17381])
+
+attr(mat_tf, "class") <- "matrix"
+class(mat_tf)
+# Verificar NAs, NaNs e Infs
+sum(is.na(mat_tf))
+
+ck_TF <- clusterData(obj = mat_tf,
+                  cluster.method = "kmeans",
+                  cluster.num = 5)
+```
+
+```{r }
+
+vis_heatmap_tf = visCluster(object = ck_TF,
+           plot.type = "heatmap",
+           #column_names_rot = 45,
+           #markGenes = unique(c(interesting_markers, "NFKBIL1", "PHF5A", "ZNF32")),
+           show_row_dend = F,
+           ht.col = list(col_range = c(-4, 0, 4),col_color = c("#08519C", "white", "#A50F15")),
+           HeatmapAnnotation = ha_col,
+           row_gap = unit(0, "mm"),
+           border = FALSE
+           )
+
+ggplotify::as.ggplot(function() {
+    draw(
+      vis_heatmap_tf,
+      heatmap_legend_side = "bottom",
+      annotation_legend_side = "bottom",
+      merge_legend = TRUE
+    )
+  })
+  
+ggplot2::ggsave("C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/scripts/autoimmuneSC/Integrated/Trajectory/scVI_2025/Heatmap_slingshot_TF_agosta_2025.svg", limitsize = FALSE)
+
+```
+
+## Only pval of startRes
+
+```{r}
+top200 <- patternRes %>% filter(pvalue < 0.05) %>% 
+  arrange(desc(waldStat)) %>% rownames(.)
+top200 <- top200[1:200]
+
+
+mat_pv <- as.matrix(t(scvi_denoised_expression)[top200, 1:17381])
+
+attr(mat_pv, "class") <- "matrix"
+class(mat_pv)
+# Verificar NAs, NaNs e Infs
+sum(is.na(mat_pv))
+
+ck_pv <- clusterData(obj = mat_pv,
+                  cluster.method = "kmeans",
+                  cluster.num = 5)
+
+clusters_df_pv = plyr::ldply(ck_pv$cluster.list, data.frame)
+colnames(clusters_df_pv) = c("cluster", "genes")
+```
+
+```{r }
+
+vis_heatmap_pv = visCluster(object = ck_pv,
+           plot.type = "heatmap",
+           #column_names_rot = 45,
+           #markGenes = unique(c(interesting_markers, "NFKBIL1", "PHF5A", "ZNF32")),
+           show_row_dend = T,
+           ht.col = list(col_range = c(-4, 0, 4),col_color = c("#08519C", "white", "#A50F15")),
+           HeatmapAnnotation = ha_col,
+           row_gap = unit(0, "mm"),
+           border = FALSE
+           )
+
+
+
+ggplotify::as.ggplot(function() {
+    draw(
+      vis_heatmap_tf,
+      heatmap_legend_side = "bottom",
+      annotation_legend_side = "bottom",
+      merge_legend = TRUE
+    )
+  })
+  
+ggplot2::ggsave("C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/scripts/autoimmuneSC/Integrated/Trajectory/scVI_2025/Heatmap_slingshot_TF_agosta_2025.svg", limitsize = FALSE)
+
+```
+
+```{r}
+library(ComplexHeatmap)
+library(dplyr)
+library(circlize)
+
+vega_20 = c(
+    '#1f77b4', '#aec7e8', '#17becf',  '#2ca02c','#ff7f0e', '#d62728','#ffbb78', '#98df8a', 
+    '#ff9896', '#9467bd', '#c5b0d5', '#8c564b', '#c49c94', '#e377c2', '#f7b6d2',
+    '#7f7f7f', '#c7c7c7', '#bcbd22', '#dbdb8d', '#9edae5')
+
+ha <- HeatmapAnnotation(
+  df = data.frame(pseudotime = phenoData_sce$slingPseudotimeAvg,
+  celltype = phenoData_sce$Cell_type_scANVI),
+  which = "column",
+  col = list(
+    pseudotime = circlize::colorRamp2(
+      c(min(phenoData_sce$slingPseudotimeAvg),
+        max(phenoData_sce$slingPseudotimeAvg)),
+      c("#fff7ec", "tomato")
+    ),
+    celltype = color_cell
+  )
+)
+
+col_fun <- colorRamp2(c(-4, 0, 4), c("#08519C", "white", "#A50F15"))
+col_fun <- colorRamp2(
+  c(-4, 0, 4),
+  c("#08519C", "white","#A50F15" )
+)
+
+set.seed(123)
+heat_map_transformed <- mat_pv[clusters_df_pv$genes, ]
+all.equal(rownames(heat_map_transformed), clusters_df_pv$genes)
+
+# visHeatmap_2 <- Heatmap(heat_map_transformed, 
+#         col = col_fun,
+#         #column_order = ptime_order,
+#         cluster_rows = FALSE,
+#         row_split = data.frame(clusters_df$cluster),
+#         cluster_columns = FALSE,
+#         show_row_dend = FALSE,
+#         show_column_names = FALSE,
+#         show_row_names = FALSE,
+#         top_annotation = ha,
+#         use_raster = TRUE
+#         )
+
+visHeatmap_2 <- plot_pseudotime_heatmap(heatmap_matrix = heat_map_transformed,
+                                   gridwidth = 7,
+                                   phenoData = phenoData_sce,
+                                   clusters = clusters_df_pv,
+                                   colormap_cell = color_cell,
+                                   fontsize = 18,
+                                   legend_font = 30,
+                                   legend_grid = 20,
+                                   legend_merging = TRUE,
+                                   legend_col = 2,
+                                   legend_row = 1
+                                   #subset = 50
+                                   )
+
+#visHeatmap_2
+
+```
+
+```{r height = 85}
+# visHeatmap <- visCluster(object = ck,
+#            border = FALSE,
+#            plot.type = "heatmap",
+#            add.sampleanno = F,
+#            HeatmapAnnotation = ha,
+#            cluster_rows = FALSE,
+#            cluster_columns = FALSE,
+#           )
+```
+
+## Smothers
+
+```{r}
+load("C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/scripts/autoimmuneSC/Integrated/Trajectory/scVI_2025/Trajectory_DE_slingshot_TradeSeq_results_for_paper_2025/sce_with_nknots_6.RData")
+```
+
+```{r}
+gene_list = c("CXCL2", "IFIT2", "RELB", "NFKB1", "ETS2",
+            "GBP1", "ISG15", "CXCL10", "ATF4", "MMP9",
+            "STAT1", "IFIT1", "RSAD2", "RBPJ", "RELA",
+            "RAC1", "S100A9", "S100A8", "RFXANK", "CCR2",
+            "MTA1", "ATF6B", "ZNF226", "NFKBIL1",
+            "ZNF32", "ITGB2", "DMAP1", "KAT8",
+            "ZNF281", "ITGAM", "ZSCAN9", "ZNF814",
+            "CXCR4", "ELK1", "ZBTB17", "TFE3", "ELK3",
+            "ZNF605", "TGIF2", "DEAF1", "KLF10", "ZNF669",
+            "SELPLG", "ITGAL", "VAV1", "CX3CR1", "JUNB", "ZNF90")
+
+gene_increase_pseudotime = c("CXCL10", "CXCL2", "ETS2", 
+                             "GBP1", "IFIT1")
+
+
+gene_decrease_pseudotime = c("ATF6B", "CX3CR1", "DEAF1", "DMAP1")
+
+
+gene_variable_pseudotime = c("ATF4", "CCR2", "CXCR4", "ELK1", "ELK3" )
+
+
+i=0
+for (g in gene_list) {
+  i=i+1
+  print(paste0("Plotting ", g))
+  p <- plotSmoothers(
+    models = sce_nknots_6[, included_cells],
+    counts = t(scvi_denoised_expression)[, 1:17381],
+    gene = g, #lineagesToPlot = 1,
+    ylab = paste0("Log(expression + 1) of ", g)
+  )
+  
+  p <- ggplotify::as.ggplot(p)
+  print(p)
+  ggsave(paste0("C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/scripts/autoimmuneSC/Integrated/Trajectory/scVI_2025/Trajectory_DE_slingshot_TradeSeq_results_for_paper_2025/plotSmoothers/selected_genes/", g, "_smouthers_plot", ".png"))
+  
+}
+```
+
+```{r}
+phenoData_sce_nknots_6 = as.data.frame(colData(sce_nknots_6[, included_cells])$crv)
+```
+
+```{r}
+df_sce_nknots_6 = scvi_denoised_expression[included_cells, gene_list]
+all.equal(rownames(phenoData_sce_nknots_6), rownames(df_sce_nknots_6))
+
+df_sce_nknots_6 = data.frame(phenoData_sce_nknots_6, df_sce_nknots_6)
+
+```
+
+```{r}
+for (g in gene_list) {
+  
+  print(paste0("Plotting ", g))
+ggplot(df_sce_nknots_6, aes(x = pseudotime.Lineage1, y = log2(.data[[g]] + 1))) +
+  labs(title = g,
+       y = "log2(Denoised expression + 1)",
+       x = "Pseudotime") +
+  theme_bw() +
+  geom_point(size=1, colour = "grey40", shape = 20) + geom_smooth(se = TRUE, level=0.95, show.legend = FALSE, linewidth = 0.8, colour = "darkblue") +
+  theme(
+    axis.text = element_text(size = 25),
+    axis.title = element_text(size = 25),
+    axis.ticks = element_line(linewidth = 2)
+  )
+
+  ggsave(paste0("C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/scripts/autoimmuneSC/Integrated/Trajectory/scVI_2025/Trajectory_DE_slingshot_TradeSeq_results_for_paper_2025/plotSmoothers/selected_genes/", g, "_smouthers_plot", ".png"))
+
+}
+```
+
+```{r}
+df_sce_nknots_6_long = tibble::rownames_to_column(df_sce_nknots_6[,-c(2:4)], var = "sample") %>% tidyr::pivot_longer(
+  .,
+  cols = -c(1:2)
+)
+```
+
+```{r fig.width=25, fig.height=40 }
+sce_nknots_6_smoothed = ggplot(df_sce_nknots_6_long[df_sce_nknots_6_long$name %in% sort(gene_list)[1:24], ], aes(x = pseudotime.Lineage1, y = log2(value + 1))) +
+  labs(y = "log2(Denoised expression + 1)",
+       x = "Pseudotime") +
+  theme_bw() +
+  geom_point(size=1, colour = "grey40", shape = 20) + geom_smooth(se = TRUE, level=0.95, show.legend = FALSE, linewidth = 0.8, colour = "darkblue") +
+  facet_wrap(~ name, scales = "free", ncol = 4) +
+  theme(
+    axis.title = element_text(size = 25, face = "bold", colour = "black"),
+    axis.text = element_text(size = 25, colour = "black"),
+    legend.text = element_text(size = 25, colour = "black"),
+    legend.title = element_text(size = 25, colour = "black"),
+    strip.text = element_text(size = 25, colour = "black"),
+    legend.position = "none"
+  )
+
+sce_nknots_6_smoothed
+
+ggsave("C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/scripts/autoimmuneSC/Integrated/Trajectory/scVI_2025/Trajectory_DE_slingshot_TradeSeq_results_for_paper_2025/plotSmoothers/Facet_smouthers_plot_part_1.png", limitsize = FALSE, dpi = 300, width = 25, height = 40)
+
+
+
+sce_nknots_6_smoothed2 = ggplot(df_sce_nknots_6_long[df_sce_nknots_6_long$name %in% sort(gene_list)[25:48], ], aes(x = pseudotime.Lineage1, y = log2(value + 1))) +
+  labs(y = "log2(Denoised expression + 1)",
+       x = "Pseudotime") +
+  theme_bw() +
+  geom_point(size=1, colour = "grey40", shape = 20) + geom_smooth(se = TRUE, level=0.95, show.legend = FALSE, linewidth = 0.8, colour = "darkblue") +
+  facet_wrap(~ name, scales = "free", ncol = 4) +
+  theme(
+    axis.title = element_text(size = 25, face = "bold", colour = "black"),
+    axis.text = element_text(size = 25, colour = "black"),
+    legend.text = element_text(size = 25, colour = "black"),
+    legend.title = element_text(size = 25, colour = "black"),
+    strip.text = element_text(size = 25, colour = "black"),
+    legend.position = "none"
+  )
+
+sce_nknots_6_smoothed2
+
+ggsave("C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/scripts/autoimmuneSC/Integrated/Trajectory/scVI_2025/Trajectory_DE_slingshot_TradeSeq_results_for_paper_2025/plotSmoothers/Facet_smouthers_plot_part_2.png", limitsize = FALSE, dpi = 300, width = 25, height = 40)
+
+```
+
+```{r fig.width=35, fig.height=40 }
+source("C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/scripts/autoimmuneSC/Integrated/R/helper_fun.R")
+df_sce_nknots_6_long_colored = inner_join(
+  df_sce_nknots_6_long, data.frame(sample = rownames(phenoData_sce), 
+                                   cell_type = phenoData_sce$Cell_type_scANVI),
+  by = "sample"
+)
+
+df_sce_nknots_6_long_colored$cell_type = gsub("Intermediate macrophage", "IL1B high macrophage",
+                                              df_sce_nknots_6_long_colored$cell_type)
+
+
+df_sce_nknots_6_long_colored$cell_type = as.factor(df_sce_nknots_6_long_colored$cell_type)
+
+
+ggplot(df_sce_nknots_6_long_colored[df_sce_nknots_6_long_colored$name %in% sort(gene_list)[1:24], ], aes(x = pseudotime.Lineage1, y = log2(value + 1), color = cell_type)) +
+  labs(y = "log2(Denoised expression + 1)",
+       x = "Pseudotime") +
+  theme_bw() +
+  geom_point(size=1) + geom_smooth(se = TRUE, level=0.95, show.legend = FALSE, linewidth = 0.8, colour = "darkblue") +
+  facet_wrap(~ name, scales = "free", ncol = 4) +
+  scale_color_manual(values = color_cell_trajectory) +
+  theme(
+    axis.title = element_text(size = 40, face = "bold", colour = "black"),
+    axis.text = element_text(size = 40, colour = "black"),
+    legend.text = element_text(size = 40, colour = "black"),
+    legend.title = element_text(size = 40, colour = "black"),
+    strip.text = element_text(size = 40, colour = "black"),
+    legend.key.height = unit(2, "cm")
+  ) + guides(color = guide_legend(override.aes = list(size = 12)))
+
+
+
+ggsave("C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/scripts/autoimmuneSC/Integrated/Trajectory/scVI_2025/Trajectory_DE_slingshot_TradeSeq_results_for_paper_2025/plotSmoothers/Facet_smouthers_plot_colored_part_1.png", limitsize = FALSE, dpi = 300, width = 35, height = 40)
+
+
+
+ggplot(df_sce_nknots_6_long_colored[df_sce_nknots_6_long_colored$name %in% sort(gene_list)[25:48], ], aes(x = pseudotime.Lineage1, y = log2(value + 1), color = cell_type)) +
+  labs(y = "log2(Denoised expression + 1)",
+       x = "Pseudotime") +
+  theme_bw() +
+  geom_point(size=1) + geom_smooth(se = TRUE, level=0.95, show.legend = FALSE, linewidth = 0.8, colour = "darkblue") +
+  facet_wrap(~ name, scales = "free", ncol = 4) +
+  scale_color_manual(values = color_cell_trajectory) +
+  theme(
+    axis.title = element_text(size = 40, face = "bold", colour = "black"),
+    axis.text = element_text(size = 40, colour = "black"),
+    legend.text = element_text(size = 40, colour = "black"),
+    legend.title = element_text(size = 40, colour = "black"),
+    strip.text = element_text(size = 40, colour = "black"),
+    legend.key.height = unit(2, "cm")
+  ) + guides(color = guide_legend(override.aes = list(size = 12)))
+
+
+ggsave("C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/scripts/autoimmuneSC/Integrated/Trajectory/scVI_2025/Trajectory_DE_slingshot_TradeSeq_results_for_paper_2025/plotSmoothers/Facet_smouthers_plot_colored_part_2.png", limitsize = FALSE, dpi = 300, width = 35, height = 40)
+
+```
+
+```{r fig.width=25, fig.height=50}
+sce_nknots_6_smoothed
+
+ggsave("C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/scripts/autoimmuneSC/Integrated/Trajectory/scVI_2025/Trajectory_DE_slingshot_TradeSeq_results_for_paper_2025/plotSmoothers/_smouthers_plot.png", limitsize = FALSE, dpi = 300, width = 25, height = 50)
+```
+
+```{r}
+tradeSeq::plotSmoothers(
+    models = sce_nknots_6[, included_cells],
+    counts = t(scvi_denoised_expression)[, 1:17381],
+    gene = g, #lineagesToPlot = 1,
+    ylab = paste0("Log(expression + 1) of ", g),
+    plotLineages = FALSE,
+    pointCol = rep("black", 17381)
+  ) +
+  geom_smooth(method = "gam", se = TRUE, colour = "grey90")
+```
+
+## Save
+
+```{r}
+#save.image("C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/scripts/autoimmuneSC/Integrated/Trajectory/scVI_2025/Session_denoised_expression_heatmap_slingshot_2025.RData")
+```
+
+```{r}
+load("C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/scripts/autoimmuneSC/Integrated/Trajectory/scVI_2025/Session_denoised_expression_heatmap_slingshot_2025.RData")
+```
+
+```{r}
+
+#BiocManager::install("ComplexHeatmap")
+id = which(sce$dataset_id == "GSE134809_Martin_et_al_2019")
+# get log normalized counts 
+to_plot <- as.matrix(logcounts(sce[,id])[topgenes, lineage_cells[id]])
+
+# Remove rows (genes) with zero standard deviation (no variation)
+to_plot <- to_plot[apply(to_plot, 1, sd) != 0, ]
+
+# Row-center (z-score scaling by gene)
+to_plot <- Matrix::t(scale(Matrix::t(to_plot), center = TRUE))
+
+# Remove rows with missing names (edge case)
+to_plot <- to_plot[!is.na(row.names(to_plot)), ]
+
+# Replace NaNs (e.g., from constant rows) with 0
+to_plot[is.nan(to_plot)] <- 0
+
+# Clip extreme values to improve heatmap contrast
+# m[m > scale_max] <- scale_max
+# m[m < scale_min] <- scale_min
+
+
+# arrange cells by pseudotime
+ptime_order <- colnames(to_plot)[order(ptime[id])]
+
+sce$slingPseudotimeAvg <- slingAvgPseudotime(sce)
+# add useful annotations
+annotations <- colData(sce)[lineage_cells, 
+                            c("slingPseudotimeAvg", 
+                            "Cell_type_scANVI"
+                            #"seurat_clusters"#,
+                            )] %>% 
+  as.data.frame()
+
+ha <- HeatmapAnnotation(df = annotations[id,])
+
+col_fun <- colorRamp2(c(-4, 0, 4), c("blue", "white", "red"))
+col_fun <- colorRamp2(
+  c(-4, -3, -2, 0, 2, 3, 4),
+  c("#313695", "#4575b4", "#91bfdb", "#ffffbf", "#fee090", "#fc8d59", "#d73027")
+)
+
+Heatmap(to_plot, 
+        col = col_fun,
+        column_order = ptime_order,
+        show_column_names = FALSE,
+        show_row_names = FALSE,
+        top_annotation = ha)
+```
+
+
+### Figure 4B
+
+```{r}
+
+
+# Load libraries
+library(pheatmap)
+library(circlize)
+
+# ---- Step 1: Simulate some mock data ----
+
+set.seed(42)
+# 100 genes (rows), 50 cells (columns)
+to_plot <- as.matrix(logcounts(sce)[topgenes, lineage_cells])
+
+# Simulated pseudotime values for each cell
+pseudotime <- annotations$slingPseudotimeAvg
+names(pseudotime) <- rownames(annotations)
+
+# Define column order based on pseudotime
+ptime_order <- colnames(to_plot)[order(ptime)]
+
+# ---- Step 2: Row-wise scaling ----
+scaled_data <- t(scale(t(to_plot)))  # same as ComplexHeatmap's approach
+expr_ordered <- scaled_data[, ptime_order]
+
+# ---- Step 3: Define color scale ----
+breaks <- seq(-4, 4, length.out = nrow(annotations))
+col_fun <- colorRamp2(c(-4, 0, 4), c("blue", "white", "red"))
+colors <- col_fun(breaks)
+
+# ---- Step 4: Top annotation (pseudotime) ----
+annotation_col <- data.frame(
+  Pseudotime = pseudotime[ptime_order],
+  row.names = ptime_order
+)
+
+# Optional: set annotation colors using gradient (continuous)
+# pheatmap does not support gradients in annotation, but we can bin
+annotation_col$Pseudotime_bin <- cut(annotation_col$Pseudotime, breaks = 5)
+ann_colors <- list(
+  Pseudotime_bin = colorRampPalette(c("yellow", "orange", "red"))(5)
+)
+names(ann_colors$Pseudotime_bin) <- levels(annotation_col$Pseudotime_bin)
+
+# Remove continuous column (pheatmap only works with factors)
+annotation_col$Pseudotime <- NULL
+
+# ---- Step 5: Plot with pheatmap ----
+pheatmap(expr_ordered,
+         cluster_rows = TRUE,
+         cluster_cols = FALSE,
+         show_rownames = FALSE,
+         show_colnames = FALSE,
+         clustering_method = "ward.D2",
+         color = colors,
+         breaks = breaks,
+         annotation_col = annotation_col,
+         annotation_colors = ann_colors,
+         useRaster = TRUE)
+
+
+```

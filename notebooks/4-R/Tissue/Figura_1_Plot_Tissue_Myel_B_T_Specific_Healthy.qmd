@@ -1,0 +1,1174 @@
+---
+title: "DE_Milo_Tissue_T_cellsoid Network expansion"
+author: "Bidossessi Hounkpe"
+date: "16/04/2023"
+format: html
+editor: visual
+knitr: 
+  opts_chunk: 
+    root.dir: "C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/scripts/scrnaseq-autoimmune-atlas/notebooks/4-R" 
+---
+
+## Load data
+
+
+
+```{r}
+rm(list = as.vector(lsf.str())) #remove functions from global env
+```
+
+```{r setup, include=FALSE}
+#knitr::opts_chunk$set(echo = TRUE,root.dir = "/mnt/g/My Drive/Projects/SCVI_Results/All_Tissue_or_Nonimmune/Subset_Reintegrated_full/Milo/enriched_depleted_SCE")
+basepath <- "C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/scripts/scrnaseq-autoimmune-atlas/notebooks/4-R/"
+knitr::opts_chunk$set(echo = TRUE, root.dir = basepath)
+
+```
+
+## Plot
+
+```{r}
+pacman::p_load(
+  tidyverse,
+  OmnipathR,
+  igraph,
+  ggraph,
+  graphlayouts,
+  ggforce,
+  tidygraph,
+  httr,
+  SingleCellExperiment,
+  scran,
+  scuttle,
+  ggprism,
+  ComplexHeatmap,
+  pheatmap,
+  circlize,
+  reticulate,
+  RCy3,
+  biomaRt,
+  ghql,
+  jsonlite,
+  ktplots,
+  ggbeeswarm,
+  ggrepel,
+  RColorBrewer,
+  ggpubr,
+  stringr
+)
+
+#Use conda env for reticulate
+use_condaenv("ScGwas", required = TRUE)
+
+#### 
+#source("C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/scripts/autoimmuneSC/Integrated/R/colors.R")
+source(str_glue(basepath, "colors.R"))
+# Source helper functions
+#source("C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/scripts/autoimmuneSC/Integrated/R/helper_fun.R")
+source(str_glue(basepath, "helper_fun.R"))
+# Network expansion 
+#source("C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/scripts/autoimmuneSC/Integrated/R/openTarget.R")
+source(str_glue(basepath, "openTarget.R"))
+
+#Milo
+#source("C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/scripts/autoimmuneSC/Integrated/R/Milo_plot.R")
+source(str_glue(basepath, "Milo_plot.R"))
+
+source(str_glue(basepath, "Milo_horizontal_plot.R"))
+```
+
+```{r}
+figurePath = "C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/sanger_gdrive/Projects/SCVI_Results/Milo_combine/Figures/"
+h5ad_path = 'C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/sanger_gdrive/Projects/SCVI_Results/All_Tissue_or_Nonimmune/Subset_Reintegrated_full/Milo/'
+```
+
+## Tissue
+
+### Miloplot
+
+```{r fig.fullwidth = TRUE, fig.width=30, fig.height=15}
+
+### Myeloid
+compare_disease_df_myel = #read.csv(str_glue("{h5ad_path}Myeloid_From_Tissue_label_transfer_Milo_3K_reajusted.csv"))
+read.csv(str_glue("../../data/Myeloid_From_Tissue_label_transfer_Milo_3K_reajusted.csv"))
+unique(compare_disease_df_myel$disease)
+unique(compare_disease_df_myel$nhood_annotation)
+
+compare_disease_df_myel$nhood_annotation = ifelse(compare_disease_df_myel$nhood_annotation%in%c("Mo-Mac", "Mo-Mac_CX3CR1"), "Mac CX3CR1+", compare_disease_df_myel$nhood_annotation)
+
+compare_disease_df_myel$nhood_annotation = str_replace(compare_disease_df_myel$nhood_annotation, "Mo-Mac", "Mac")
+
+compare_disease_df_myel$nhood_annotation = str_replace(compare_disease_df_myel$nhood_annotation, "Intermediate macrophage", bquote("IL1B high macrophage"))
+
+compare_disease_df_myel$Sig = ifelse(compare_disease_df_myel$Sig == "True", TRUE, FALSE)
+
+compare_disease_df_myel = compare_disease_df_myel[compare_disease_df_myel$disease %in% c('CD_colon', 'CD_ileum', 'Resitant_treat_RA_syno_membr', 'Naïve_treat_RA_syno_membr'), ]
+
+print(table(compare_disease_df_myel$disease))
+
+
+###T cell
+
+compare_disease_df_T_cells = #read.csv(str_glue("{h5ad_path}T_cell_From_Tissue_label_transfer_Milo_3K_reajusted.csv"))
+read.csv(str_glue("../../data/T_cell_From_Tissue_label_transfer_Milo_3K_reajusted.csv"))
+unique(compare_disease_df_T_cells$disease)
+unique(compare_disease_df_T_cells$nhood_annotation)
+
+
+compare_disease_df_T_cells$Sig = ifelse(compare_disease_df_T_cells$Sig == "True", TRUE, FALSE)
+
+compare_disease_df_T_cells = compare_disease_df_T_cells[compare_disease_df_T_cells$disease %in% c('CD_colon', 'CD_ileum', 'Resitant_treat_RA_syno_membr', 'Naïve_treat_RA_syno_membr'), ]
+
+print(table(compare_disease_df_T_cells$disease))
+
+### B cells
+
+compare_disease_df_B_cells = #read.csv(str_glue("{h5ad_path}B_cells_From_Tissue_label_transfer_Milo_3K_reajusted.csv"))
+read.csv(str_glue("../../data/B_cells_From_Tissue_label_transfer_Milo_3K_reajusted.csv"))
+unique(compare_disease_df_B_cells$disease)
+unique(compare_disease_df_B_cells$nhood_annotation)
+
+
+compare_disease_df_B_cells$Sig = ifelse(compare_disease_df_B_cells$Sig == "True", TRUE, FALSE)
+
+compare_disease_df_B_cells = compare_disease_df_B_cells[compare_disease_df_B_cells$disease %in% c('CD_colon', 'CD_ileum', 'Resitant_treat_RA_syno_membr', 'Naïve_treat_RA_syno_membr'), ]
+
+print(table(compare_disease_df_B_cells$disease))
+
+
+#### Prepare data
+
+compare_disease_df = rbind(compare_disease_df_B_cells, compare_disease_df_myel, compare_disease_df_T_cells[,-6])
+
+compare_disease_df$nhood_annotation2 = case_when(
+  compare_disease_df$nhood_annotation %in% c(
+    "CD8_ZNF683+",
+    "Tcm/Naive cytotoxic T cells",
+    "Tcm/Naive helper T",
+    "Tem/Trm",
+    "Tem/Trm cytotoxic_Syn-Fluid",
+    "Trm cytotoxic INFGhi",
+    "Tem/Trm cytotoxic",
+    "Trm cytotoxic",
+    "Trm_gut",
+    "Cycl CD8"
+  ) ~ "CD8 T cells",
+  compare_disease_df$nhood_annotation %in% c(
+    "PD1 CD4 T cells",
+    "T follicular helper",
+    "T regs",
+    "Tem/Eff helper T",
+    "CD4",
+    "Th1",
+    "Th1/Th17_gut",
+    "Th17",
+    "TCD4_CM/T_Naive_Syn-Fluid",
+    "Cycl Treg"
+  ) ~ "CD4 T cells",
+  compare_disease_df$nhood_annotation %in% c("Cycl NK", "NK", "NK_CD56bright", "NK_CD16hi") ~ "NK cells",
+  #compare_disease_df$nhood_annotation %in% c("Cycling") ~ "Cycling myeloid",
+  compare_disease_df$nhood_annotation %in% c("DC1", "DC2", "Mig DC", "pDC") ~ "DC",
+  compare_disease_df$nhood_annotation %in% c("GC B cells", "GC B cells1", "Memory B cells", "Naive B cells", "ABCs", "Proliferative GC B cells") ~ "B cells",
+  compare_disease_df$nhood_annotation %in% c("Plasma cells3", "Plasma cells1", "Plasma cells2", "IgM plasma cells", "Plasmablasts") ~ "Plasmablasts/Plasma Cells",
+  compare_disease_df$nhood_annotation %in% c(
+    "Mac NUPR1_TREM2_hi",
+    "Mac TREM2",
+    "Mac1",
+    "Mac LYVE1+",
+    "Mac CX3CR1+",
+    "Mac2" ,
+    "Mac MERTK_hi_TREM2_low",
+    "Mac CCL2+LYVE1+",
+    "Mac TREM2_hi"
+  ) ~ "TR Macrophages",
+  compare_disease_df$nhood_annotation %in% c("IL1B high macrophage", "Mac S100A8 prod", "Mac CX3CR1+") ~ "Inflammatory Macrophages",
+  compare_disease_df$nhood_annotation %in% c("γδ T cells", "Trm_γδ", "ILC3", "Mast cell") ~ "Unconventional T cells",
+  .default = compare_disease_df$nhood_annotation
+) %>% as.factor()
+
+
+compare_disease_df$nhood_annotation = compare_disease_df$nhood_annotation2
+
+compare_disease_df = compare_disease_df[,-8]
+
+compare_disease_df = unique(compare_disease_df)
+
+unique(compare_disease_df$nhood_annotation)
+
+compare_disease_df$disease = case_when(
+  #compare_disease_df$disease == "spondyloarhtriti" ~ "spondyloarhtritis",
+  compare_disease_df$disease == "Resitant_treat_RA_syno_membr" ~ "Resistant_treat_RA_syno_membr",
+  TRUE ~ compare_disease_df$disease
+)
+
+# umap$disease_short_2 = case_when(
+#   umap$disease_short_2 == "spondyloarhtriti" ~ "spondyloarhtritis",
+#   umap$disease_short_2 == "Resitant_treat_RA" ~ "Resistant_treat_RA",
+#   TRUE ~ umap$disease_short_2,
+# )
+
+compare_disease_df = compare_disease_df[!compare_disease_df$nhood_annotation%in%c("Unknown", "Cycling"), ]
+```
+#### Figure 1G
+
+```{r fig.fullwidth = TRUE, fig.width=40, fig.height=15}
+
+#### Prepare data
+
+nhoo_prep = prep_nhoo(nhood_res=compare_disease_df, condition = "disease", Sig = "Sig", thres = 0.1,
+                     dis_pref = "zz", index_cell = "index_cell", order_by_kth = FALSE,
+                     nhood_annotation="nhood_annotation", n_shared=0,
+                     SpatialFDR = "SpatialFDR", logFC = "logFC")
+  
+
+nhoo_prep$condition = str_replace(nhoo_prep$condition, "CD_", "IBD_") %>% as.factor()
+
+nhoo_prep$nhood_annotation = droplevels(nhoo_prep$nhood_annotation)
+nhoo_prep$nhood_annotation %>% unique()
+
+Palette_m_t_B = vega_20[1:length(unique(nhoo_prep$nhood_annotation))]
+
+names(Palette_m_t_B) = sort(unique(nhoo_prep$nhood_annotation))
+
+#set.seed(123)  
+#names(Palette_m_t_B) = sample(unique(nhoo_prep$nhood_annotation), 19)
+
+
+disease = c(
+  IBD_colon = "IBD",
+  IBD_ileum = "IBD",
+  Naïve_treat_RA_syno_membr = "Naïve_treat_RA",
+  Remission_RA_syno_membr = "Remission_RA",
+  Resistant_treat_RA_syno_membr = "Resistant_treat_RA",
+  Uninflamed_IBD_colon = "IBD"
+)
+
+
+tissue = c(
+  IBD_colon = "Colon",
+  IBD_ileum = "Ileum",
+  Naïve_treat_RA_syno_membr = "Synovial membrane",
+  Remission_RA_syno_membr = "Synovial membrane",
+  Resistant_treat_RA_syno_membr = "Synovial membrane",
+  Uninflamed_IBD_colon = "Uninflamed colon"
+)
+
+nhoo_prep$Disease = disease[nhoo_prep$condition]
+
+nhoo_prep$Tissue = tissue[nhoo_prep$condition]
+
+
+milo_horz_plot_simple(
+  nhoo_prep = nhoo_prep,
+  anot_bar_height = 0.05,
+  col.pal = Palette_m_t_B,
+  label_size = 30,
+  annot_size = 15,
+  annot_col = "black",
+  annot.bar.height = 0.5,
+  expand_y_sc = 0.1,
+  legend.key.size = unit(1.5, "cm"),
+  legend.text = element_text(size = 40),
+  legend.title = element_text(size = 40, face = "bold"),
+  legend.position = "bottom",
+  legend.box.spacing = unit(5, 'cm'),
+  left.annot = tissue,
+  condition_tile_custom = disease,
+  legend.spacing =5,
+  fc_legend.size =5,
+  fc_annot_size = 40,
+  legend.margin.custom = -220,
+  dendro.width = 3
+) +
+  guides(fill = guide_legend(title.position="top", title.hjust = 0.5, ncol = 2))
+
+
+
+#milo_hori_plot
+
+#ggsave(str_glue("{figurePath}Milo_Myel_B_T_cells_From_Tissue_compareDisease_with_specific_healthy.png"), width = 40, height = 15, bg='transparent')
+
+```
+
+
+```{r fig.fullwidth = TRUE, fig.width=40, fig.height=15}
+source(str_glue(basepath, "Milo_horizontal_plot.R"))
+milo_plot_horizontal(
+  nhoo_prep = nhoo_prep,
+  anot_bar_height = 0.05,
+  col.pal = Palette_m_t_B,
+  label_size = 30,
+  annot_size = 15,
+  annot_col = "black",
+  annot.bar.height = 0.5,
+  expand_y_sc = 0.1,
+  legend.key.size = unit(1.5, "cm"),
+  legend.text = element_text(size = 40),
+  legend.title = element_text(size = 40, face = "bold"),
+  legend.position = "bottom",
+  legend.box.spacing = unit(5, 'cm'),
+  left.annot = tissue,
+  condition_tile_custom = disease,
+  legend.spacing =5,
+  fc_legend.size =5,
+  fc_annot_size = 40,
+  legend.margin.custom = -220,
+  dendro.width = 3,
+  y.axis.label = "Comparative neighbourhood \nabundance",
+  y.axis.label.size = 35, bar.title = "Tissue"
+) +
+  guides(fill = guide_legend(title.position="top", title.hjust = 0.5, ncol = 2))
+```
+
+```{r}
+ggsave(str_glue("{figurePath}Milo_Myel_B_T_cells_From_Tissue_compareDisease_with_specific_healthy_2026.png"), width = 40, height = 15, bg='transparent')
+```
+
+
+
+
+### Umap Myeloid from tissue
+
+```{r}
+
+#umap = read.csv("C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/sanger_gdrive/Projects/SCVI_Results/Milo_combine/Obs_Myeloid_B_T_From_Tissue_label_transfert_Subset_annotated_Milo_3K_with_UMAP.csv")
+
+umap = read.csv("../../data/Obs_Myeloid_B_T_From_Tissue_label_transfert_Subset_annotated_Milo_3K_with_UMAP.csv")
+```
+
+
+```{r}
+umap$Cell_type_scANVI2 = umap$Cell_type_scANVI
+
+umap$Cell_type_scANVI2 = str_replace(umap$Cell_type_scANVI2, "Plasma cell.*$", "Plasma cells")
+umap$Cell_type_scANVI2 = str_replace(umap$Cell_type_scANVI2, "IgM plasma cells", "Plasma cells")
+umap$Cell_type_scANVI2 = str_replace(umap$Cell_type_scANVI2, "Mo-Mac.*$", "Mo-Mac")
+umap$Cell_type_scANVI2 = ifelse(umap$Cell_type_scANVI2 %in% c("Mac MERTK_hi_TREM2_low", "Mac NUPR1_TREM2_hi",
+                                                              "Mac TREM2_hi"), "Mac TREM2", umap$Cell_type_scANVI2)
+umap$Cell_type_scANVI2 = str_replace(umap$Cell_type_scANVI2, "Mo-Mac", "Mac")
+umap$Cell_type_scANVI2 = str_replace(umap$Cell_type_scANVI2, "NK.*$", "NK")
+umap$Cell_type_scANVI2 = str_replace(umap$Cell_type_scANVI2, "Mac.{1}$", "Mac")
+umap$Cell_type_scANVI2 = str_replace(umap$Cell_type_scANVI2, "Intermediate macrophage", "IL1B high macrophage")
+umap$Cell_type_scANVI2 = str_replace(umap$Cell_type_scANVI2, "Trm cytot.*$", "Trm cytotoxic")
+umap$Cell_type_scANVI2 = str_replace(umap$Cell_type_scANVI2, "Tem/Trm.*$", "Tem/Trm")
+umap$Cell_type_scANVI2 = str_replace(umap$Cell_type_scANVI2, "Mo-Mac CCL2+LYVE1+", "Mo-Mac LYVE1+")
+umap$Cell_type_scANVI2 = str_replace(umap$Cell_type_scANVI2, "Cycling", "Cycling Myel")
+umap$Cell_type_scANVI2 = ifelse(umap$Cell_type_scANVI2 %in% c("Cycl CD8", "Cycl Treg"), "Cycl T", umap$Cell_type_scANVI2)
+umap$Cell_type_scANVI2 = str_replace(umap$Cell_type_scANVI2, "TCD4_CM/T_Naive_Syn-Fluid", "Tcm/Naive helper T")
+umap$Cell_type_scANVI2 = ifelse(umap$Cell_type_scANVI2 %in% c("Proliferative GC B cells", "GC B cells1"), "GC B cells", umap$Cell_type_scANVI2)
+
+
+unique(umap$Cell_type_scANVI2) %>% sort()
+```
+
+```{r}
+umap$Cell_type_scANVI3 = case_when(
+  umap$Cell_type_scANVI2 %in% c(
+    "CD8_ZNF683+",
+    "Tcm/Naive cytotoxic T cells",
+    "Tcm/Naive helper T",
+    "Tem/Trm",
+    "Trm cytotoxic",
+    "Trm_gut"
+  ) ~ "CD8 T cells",
+  umap$Cell_type_scANVI2 %in% c(
+    "PD1 CD4 T cells",
+    "T follicular helper",
+    "T regs",
+    "Tem/Eff helper T",
+    "CD4",
+    "Th1",
+    "Th1/Th17_gut",
+    "Th17"
+  ) ~ "CD4 T cells",
+  umap$Cell_type_scANVI2 %in% c("NK") ~ "NK cells",
+  #umap$Cell_type_scANVI2 %in% c("DC1", "DC2") ~ "DC",
+  umap$Cell_type_scANVI2 %in% c("GC B cells", "Memory B cells", "Naive B cells", "ABCs") ~ "B cells",
+  umap$Cell_type_scANVI2 %in% c("Plasma cells", "Plasmablasts") ~ "Plasmablasts/Plasma Cells",
+  umap$Cell_type_scANVI2 %in% c("IL1B high macrophage", "Mac TREM2", "Mac", "Mac S100A8 prod", "Cycling Myel") ~ "Macrophages",
+  umap$Cell_type_scANVI2 %in% c("γδ T cells", "Trm_γδ", "MAIT cell", "ILC3") ~ "Unconventional T cells",
+  .default = umap$Cell_type_scANVI2
+) %>% as.factor()
+
+levels(umap$Cell_type_scANVI3)
+```
+#### Figure 1D
+
+```{r fig.width= 12, fig.height=10}
+# 
+# colourCount = length(unique(umap$Cell_type_scANVI2))
+#   
+# #getPalette = colorRampPalette(vega_20)
+# 
+# getPalette = colorRampPalette(brewer.pal(12, "Paired"))
+#   
+# Palette = getPalette(colourCount)
+# 
+# Palette= c("#A6CEE3","#1EB1D1","#C78948","#879CC7","#3983BA","#8688DD","#60A6A1","#B15928","#AEDD87","#E7E099","#898B6C","#65B851","#40A635","#579E4D","#919D5F","#CB9B7F","#F99392","#F26E6E","#FDA746","#EB0000","#A44444","#ABCDEF","#F06C45","#F79C5D","#FDB966","#8861AC","#FE9425","#AF820B","#AB8BA2","#E39970","#D0A9AE","#E0CAC9","#6C409B","#917099","#BCA899","#A483BE","#F4E98A","#DEB969","#8BC895")
+
+Palette = vega_20[1:length(unique(umap$Cell_type_scANVI3))]  
+names(Palette) = sort(unique(umap$Cell_type_scANVI3))
+
+
+umap_tissue = plot_umap(
+  umap_data = umap,
+  cluster = "Cell_type_scANVI3",
+  umap_1 = "umap1",
+  umap_2 = "umap2",
+  selected_clusters = "all",
+  shape.size = 0.5,
+  cluster_palette = Palette,
+  arrow.length = 3,
+  repel_text_size = 7,
+  repel = "label",
+  font = "plain",
+  fill = alpha("white", 0.8),
+  color = "black",
+  axis.lab.size = 5,
+  cust.alpha = 0.7
+)
+
+
+umap_tissue
+
+```
+
+```{r}
+
+
+ggsave(
+  str_glue(
+    "{figurePath}UMAP_T_cells_B_T_From_Tissue_broad.png"
+  ),
+  width = 12,
+  height = 10,
+  bg = 'transparent'
+)
+
+
+ggsave(
+  str_glue(
+    "{figurePath}UMAP_T_cells_B_T_From_Tissue_broad.svg"
+  ),
+  width = 12,
+  height = 10,
+  bg = 'transparent'
+)
+
+
+  
+```
+
+
+
+
+### Cell abundance
+#### Figure 1E
+
+```{r fig.fullwidth = TRUE, fig.width=15, fig.height=11}
+
+umap$disease_short_2 = case_when(
+  umap$disease_short_2 == "spondyloarhtriti" ~ "spondyloarhtritis",
+  umap$disease_short_2 == "Resitant_treat_RA" ~ "Resistant_treat_RA",
+  umap$disease_short_2 == "Uninfl_CD" ~ "Uninflamed_CD",
+  umap$disease_short_2 == "hashimoto" ~ "Hashimoto's thyroiditis",
+  TRUE ~ umap$disease_short_2,
+)
+
+umap$disease_short_2 = str_replace(umap$disease_short_2, "CD", "IBD") %>% as.factor()
+
+umap = umap %>% mutate(
+  disease_short_3 = case_when(
+    disease_short_2 == "Healthy" ~ paste0(disease_short_2, "_", tissue_harmo),
+    tissue_harmo %in% c("Colon", "Ileum") ~ paste0(disease_short_2, "_", tissue_harmo),
+    TRUE ~ disease_short_2
+  )
+)
+
+
+unique(umap$disease_short_3) %>% sort()
+
+
+myobs = umap %>% filter(!(disease_short_3 %in% c("Undif_RA"))) %>% group_by(Cell_type_scANVI3, disease_short_3) %>% summarise(Cell_count=n())
+
+#my_obs$tissue = ifelse(my_obs$tissue == "Macrophage", "Synovium", as.character(my_obs$tissue))
+Palette = vega_20[1:length(unique(myobs$Cell_type_scANVI3))]  
+names(Palette) = sort(unique(myobs$Cell_type_scANVI3))
+
+
+myobs$disease_short_3 = str_replace(myobs$disease_short_3, "spondyloarhtritis_Colon", "Spondyloarhtritis_Colon")
+myobs$disease_short_3 = str_replace(myobs$disease_short_3, "Healthy_Synovial membrane", "Healthy_Synovial_membrane") %>% as.factor()
+
+myobs$disease_short_3 = factor(myobs$disease_short_3, levels = c("Healthy_Colon", "Uninflamed_IBD_Colon", "IBD_Colon", "IBD_spondyloarthritis_Colon",
+                                                                 "Spondyloarhtritis_Colon", "Paed_IBD_Colon",
+                                                                 "Healthy_Ileum", "Paed_Healthy_Ileum", "Uninflamed_IBD_Ileum", "IBD_Ileum", 
+                                                                 "Paed_IBD_Ileum", "Healthy_Synovial_membrane", "Remission_RA", "Naïve_treat_RA",
+                                                                 "Resistant_treat_RA", "pso_arthritis", "Oligo_JIA", "Hashimoto's thyroiditis"
+                                                                 ))
+
+
+myobs$Cell_type_scANVI3 <- factor(
+  myobs$Cell_type_scANVI3,
+  levels = c(
+    # B lineage
+    "B cells",
+    "Plasmablasts/Plasma Cells",
+
+    # T lineage
+    "CD4 T cells",
+    "CD8 T cells",
+    "Cycl T",
+    "Unconventional T cells",
+
+    # NK lineage
+    "NK cells",
+    "Cycl NK",
+
+    # Myeloid lineage
+    "DC1",
+    "DC2",
+    "Macrophages",
+    "Mig DC",
+
+    # pDC
+    "pDC",
+
+    # Mast
+    "Mast cell",
+
+    # Doublets
+    "MNP/B doublets",
+    "T/B doublets"
+  )
+)                                           
+                                
+
+plotabd_tissue = plot_abundance_bar(
+  data = myobs,
+  count.on.top = TRUE,
+  text.size = 7,
+  axis.text.size = 20,
+  key.size = 0.9,
+  fill_column = "Cell_type_scANVI3",
+  y_column = "Cell_count",
+  x_column = "disease_short_3",
+  y_label = "Composition (%)",
+  fill_label = "Cellular compartment",
+  margin.bottom = 50,
+  margin.left = 50,
+ # margin.left = 25,
+  Palette = Palette
+)
+
+# 
+# 
+# ggsave(str_glue("{figurePath}/Myeloid_B_T_From_Tissue_abundance.svg"), 
+#        bg='transparent',
+#        width = 16,
+#        height = 12)
+# 
+
+plotabd_tissue
+
+#ggsave(str_glue("{figurePath}/Myeloid_B_T_From_Tissue_abundance.png"), 
+   #    bg='transparent',
+   #    width = 15,
+    #   height = 11)
+
+```
+
+### Broad Myeloid_T_B cells
+
+```{r}
+myobs <- myobs %>%
+  mutate(
+    Cell_type_scANVI4 = case_when(
+      Cell_type_scANVI3 %in% c(
+        "B cells",
+        "Plasmablasts/Plasma Cells"
+      ) ~ "B cells",
+
+      Cell_type_scANVI3 %in% c(
+        "CD4 T cells",
+        "CD8 T cells",
+        "Cycl T",
+        "Unconventional T cells"
+      ) ~ "T cells",
+
+      Cell_type_scANVI3 %in% c(
+        "NK cells",
+        "Cycl NK"
+      ) ~ "NK cells",
+
+      Cell_type_scANVI3 %in% c(
+        "DC1",
+        "DC2",
+        "Macrophages",
+        "Mig DC",
+        "pDC"
+      ) ~ "Myeloid cells",
+
+      Cell_type_scANVI3 == "Mast cell" ~ "Mast cells",
+
+      Cell_type_scANVI3 %in% c(
+        "MNP/B doublets",
+        "T/B doublets"
+      ) ~ "MNP and T/B Doublets",
+
+      TRUE ~ NA_character_
+    )
+  )
+
+unique(myobs$Cell_type_scANVI4)
+```
+
+```{r fig.fullwidth = TRUE, fig.width=14, fig.height=9}
+
+plot_abundance_bar(
+  data = myobs,
+  count.on.top = TRUE,
+  text.size = 7,
+  axis.text.size = 20,
+  key.size = 0.9,
+  fill_column = "Cell_type_scANVI4",
+  y_column = "Cell_count",
+  x_column = "disease_short_3",
+  y_label = "Composition (%)",
+  fill_label = "Cellular compartment",
+  margin.bottom = 50,
+  margin.left = 50,
+ # margin.left = 25,
+  Palette = lineage3
+)
+
+#
+#
+# ggsave(str_glue("{figurePath}/Myeloid_B_T_From_Tissue_abundance.svg"),
+#        bg='transparent',
+#        width = 16,
+#        height = 12)
+#
+
+ggsave(str_glue("{figurePath}/Broad_T_cellsoid_B_T_From_Tissue_abundance.png"),
+       bg='transparent',
+       width = 14,
+       height = 9)
+
+```
+
+## PBMC
+
+```{r fig.fullwidth = TRUE, fig.width=30, fig.height=15}
+h5ad_path = 'C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/sanger_gdrive/Projects/SCVI_Results/Immune_compartment_PBMC/Subset_Agosto_2023/Milo/'
+
+### Myeloid
+compare_disease_df_myel = read.csv(str_glue("../../data/Myeloid_From_PBMC_label_transfer_Milo_3K.csv"))
+
+unique(compare_disease_df_myel$disease)
+unique(compare_disease_df_myel$nhood_annotation)
+
+compare_disease_df_myel$nhood_annotation = ifelse(compare_disease_df_myel$nhood_annotation%in%c("cMon_1", "cMon_2", "CCR7_CDE3", "Mon_SIRPA"), "Classical monocytes", compare_disease_df_myel$nhood_annotation)
+
+compare_disease_df_myel$Sig = ifelse(compare_disease_df_myel$Sig == "True", TRUE, FALSE)
+
+compare_disease_df_myel = compare_disease_df_myel[compare_disease_df_myel$disease %in% c("all_CD",
+                                                                                                  "all_hashimoto",
+                                                                                                  "all_sjo_syndr",
+                                                                                                  "all_SLE",
+                                                                                                  "all_spondoarthritis"), ]
+
+print(table(compare_disease_df_myel$disease))
+
+
+###T cell
+
+compare_disease_df_T_cells = read.csv(str_glue("../../data/T_cell_From_PBMC_label_transfer_Milo_2K_2.csv"))
+
+unique(compare_disease_df_T_cells$disease)
+unique(compare_disease_df_T_cells$nhood_annotation)
+
+
+compare_disease_df_T_cells$Sig = ifelse(compare_disease_df_T_cells$Sig == "True", TRUE, FALSE)
+
+compare_disease_df_T_cells = compare_disease_df_T_cells[compare_disease_df_T_cells$disease %in% c("all_CD",
+                                                                                                  "all_hashimoto",
+                                                                                                  "all_sjo_syndr",
+                                                                                                  "all_SLE",
+                                                                                                  "all_spondoarthritis"),]
+
+print(table(compare_disease_df_T_cells$disease))
+
+### B cells
+
+compare_disease_df_B_cells = read.csv(str_glue("../../data/B_cell_From_PBMC_label_transfer_Milo_3K.csv"))
+
+unique(compare_disease_df_B_cells$disease)
+unique(compare_disease_df_B_cells$nhood_annotation)
+
+
+compare_disease_df_B_cells$Sig = ifelse(compare_disease_df_B_cells$Sig == "True", TRUE, FALSE)
+
+compare_disease_df_B_cells = compare_disease_df_B_cells[compare_disease_df_B_cells$disease %in% c("all_CD",
+                                                                                                  "all_hashimoto",
+                                                                                                  "all_sjo_syndr",
+                                                                                                  "all_SLE",
+                                                                                                  "all_spondoarthritis"), ]
+
+print(table(compare_disease_df_B_cells$disease))
+
+
+#### Prepare data
+colnames(compare_disease_df_myel) = colnames(compare_disease_df_B_cells)
+
+compare_disease_df = rbind(compare_disease_df_B_cells, compare_disease_df_myel, compare_disease_df_T_cells[,-6])
+
+compare_disease_df$nhood_annotation2 = case_when(
+  compare_disease_df$nhood_annotation %in% c(
+    "GZMK producing CD4",
+    "Tem cytotoxic",
+    "Tcm/Naive cytotoxic",
+     "Tcm/Naive cytotoxic 1",
+     "Tcm/Naive cytotoxic 2",
+    "Tem/Temra cytotoxic",
+    "Tem/Trm cytotoxic T cells",
+    "Tem/Temra cytotoxic T cells"
+  ) ~ "CD8 T cells",
+  compare_disease_df$nhood_annotation %in% c(
+    "Tcm/Naive h activated",
+    "Tcm CCR6",
+    "Tcm/Naive helper",
+    "Tregs"
+  ) ~ "CD4 T cells",
+  compare_disease_df$nhood_annotation %in% c("NKT", "CD16+ NK", "CD16- NK CD56+", "Cycling NK", "CD16+ IFNG+ NK") ~ "NK cells",
+  compare_disease_df$nhood_annotation %in% c("DC1", "DC2", "pDC") ~ "DC",
+  compare_disease_df$nhood_annotation %in% c("Naive B cells", "Memory B cells_2", "Memory B cells_1", "B cells_CR1", "ABC") ~ "B cells",
+  compare_disease_df$nhood_annotation %in% c("γδ T ZNF683+", "γδ T", "MAIT cells", "MAIT_act", "DN") ~ "Unconventional T cells",
+  #compare_disease_df$nhood_annotation %in% c("γδ T ZNF683+", "γδ T") ~ "γδ T cells",
+  #compare_disease_df$nhood_annotation %in% c("MAIT cells", "MAIT_act") ~ "MAIT cells",
+  compare_disease_df$nhood_annotation %in% c("Non-cMon") ~ "Non classical monocytes",
+  .default = compare_disease_df$nhood_annotation
+) %>% as.factor()
+
+unique(compare_disease_df$nhood_annotation)
+
+compare_disease_df$nhood_annotation3 = case_when(
+  compare_disease_df$nhood_annotation %in% c(
+    "GZMK producing CD4",
+    "Tem cytotoxic",
+    "Tcm/Naive cytotoxic",
+     "Tcm/Naive cytotoxic 1",
+     "Tcm/Naive cytotoxic 2",
+    "Tem/Temra cytotoxic",
+    "Tem/Trm cytotoxic T cells",
+    "Tcm/Naive h activated",
+    "Tcm CCR6",
+    "Tcm/Naive helper",
+    "Tregs",
+    #"TCD4_CD8",
+    "Cycling T cell",
+    "Tem/Temra cytotoxic T cells"
+  ) ~ "T cells",
+  compare_disease_df$nhood_annotation %in% c("CD16+ NK", "CD16- NK CD56+", "Cycling NK", "CD16+ IFNG+ NK") ~ "NK cells",
+  compare_disease_df$nhood_annotation %in% c("DC1", "DC2", "pDC") ~ "DC",
+  compare_disease_df$nhood_annotation %in% c("Naive B cells", "Memory B cells_2", "Memory B cells_1", "B cells_CR1", "ABC") ~ "B cells",
+  compare_disease_df$nhood_annotation %in% c("NKT", "γδ T ZNF683+", "γδ T", "MAIT cells", "MAIT_act", "DN") ~ "Unconventional T cells",
+  compare_disease_df$nhood_annotation %in% c("Non-cMon", "Classical monocytes") ~ "Monocytes",
+  .default = compare_disease_df$nhood_annotation
+) %>% as.factor()
+
+unique(compare_disease_df$nhood_annotation2)
+
+compare_disease_df$nhood_annotation = compare_disease_df$nhood_annotation2
+
+compare_disease_df = compare_disease_df[,-c(8,9)]
+
+compare_disease_df = unique(compare_disease_df)
+
+unique(compare_disease_df$nhood_annotation)
+
+#compare_disease_df = compare_disease_df[!compare_disease_df$nhood_annotation%in%c("Unknown", "Cycling"), ]
+
+is.numeric(compare_disease_df$logFC)
+
+
+table(compare_disease_df$Sig)
+
+compare_disease_df = compare_disease_df[compare_disease_df$nhood_annotation != "TCD4_CD8",]
+```
+
+#### Figure 1H
+
+```{r fig.fullwidth = TRUE, fig.width=40, fig.height=15}
+
+#### Prepare data
+
+nhoo_prep = milo_prep_data(nhood_res=compare_disease_df, condition = "disease", Sig = "Sig", thres = 0.1,
+                     dis_pref = "zz", index_cell = "index_cell", order_by_kth = FALSE,
+                     nhood_annotation="nhood_annotation", n_shared=2,
+                     SpatialFDR = "SpatialFDR", logFC = "logFC")
+  
+
+nhoo_prep$condition = str_replace(nhoo_prep$condition, "CD", "IBD") %>% as.factor()
+nhoo_prep$condition = str_remove(nhoo_prep$condition, "all_") %>% as.factor()
+nhoo_prep$condition = str_replace(nhoo_prep$condition, "spondoarthritis", "Spondyloarthritis") %>% as.factor()
+nhoo_prep$condition = str_replace(nhoo_prep$condition, "hashimoto", "Hashimoto's thyroiditis") %>% as.factor()
+nhoo_prep$condition = str_replace(nhoo_prep$condition, "sjo_syndr", "Sjögren's Syndrome") %>% as.factor()
+
+nhoo_prep$nhood_annotation = droplevels(nhoo_prep$nhood_annotation)
+nhoo_prep$nhood_annotation %>% unique()
+
+
+
+#set.seed(123)  
+#names(Palette_m_t_B) = sample(unique(nhoo_prep$nhood_annotation), 19)
+
+Palette = vega_20[1:length(unique(nhoo_prep$nhood_annotation))]
+names(Palette) = sort(unique(nhoo_prep$nhood_annotation)) 
+
+milo_blood = milo_plot_horizontal(
+  nhoo_prep = nhoo_prep,
+  anot_bar_height = 0.05,
+  col.pal = Palette,
+  label_size = 30,
+  annot_size = 15,
+  annot_col = "black",
+  annot.bar.height = 0.5,
+  expand_y_sc = 0.1,
+  legend.key.size = unit(1.5, "cm"),
+  legend.text = element_text(size = 40),
+  legend.title = element_text(size = 40, face = "bold"),
+  legend.position = "bottom",
+  legend.box.spacing = unit(5, 'cm'),
+  legend.spacing =5,
+  fc_legend.size =5,
+  fc_annot_size = 40,bar.title = "Blood",
+  legend.margin.custom = -220,
+  dendro.width = 3,
+  y.axis.label = "Comparative neighbourhood \nabundance",
+  y.axis.label.size = 35
+) +
+  guides(fill = guide_legend(title.position="top", title.hjust = 0.5, ncol = 2))
+
+
+milo_blood
+#milo_hori_plot
+
+#ggsave(str_glue("{figurePath}Milo_Myel_B_T_cells_From_PBMC_compareDisease_with_specific_healthy_2026.png"), width = 40, height = 15, bg='transparent', limitsize = FALSE)
+
+```
+
+### Umap Myeloid from tissue
+
+```{r}
+
+umap = read.csv("../../data/Obs_Myeloid_B_T_From_PBMC_label_transfert_Subset_annotated_Milo_3K_with_UMAP.csv")
+```
+
+```{r}
+umap$Cell_type_scANVI2 = umap$Cell_type_scANVI
+
+umap$Cell_type_scANVI2 = case_when(
+  umap$Cell_type_scANVI2 %in% c(
+    "GZMK producing CD4",
+    "Tem cytotoxic",
+    "Tcm/Naive cytotoxic",
+     "Tcm/Naive cytotoxic 1",
+     "Tcm/Naive cytotoxic 2",
+    "Tem/Temra cytotoxic",
+    "Tem/Trm cytotoxic T cells",
+    "Tem/Temra cytotoxic T cells"
+  ) ~ "CD8 T cells",
+  umap$Cell_type_scANVI2 %in% c(
+    "Tcm/Naive h activated",
+    "Tcm CCR6",
+    "Tcm/Naive helper"
+  ) ~ "CD4 T cells",
+  umap$Cell_type_scANVI2 %in% c("NKT", "CD16+ NK", "CD16- NK CD56+", "Cycling NK", "CD16+ IFNG+ NK") ~ "NK cells",
+  #umap$Cell_type_scANVI2 %in% c("DC1", "DC2", "pDC") ~ "DC",
+  umap$Cell_type_scANVI2 %in% c("Naive B cells", "Memory B cells_2", "Memory B cells_1", "B cells_CR1", "ABC") ~ "B cells",
+  umap$Cell_type_scANVI2 %in% c("γδ T", "γδ T ZNF683+", "MAIT cells", "MAIT_act", "DN") ~ "Unconventional T cells",
+  # umap$Cell_type_scANVI2 %in% c("γδ T ZNF683+", "γδ T") ~ "γδ T cells",
+  # umap$Cell_type_scANVI2 %in% c("MAIT cells", "MAIT_act") ~ "MAIT cells",
+  umap$Cell_type_scANVI2 %in% c("cMon_1", "cMon_2", "CCR7_CDE3", "Mon_SIRPA") ~ "Classical monocytes",
+  umap$Cell_type_scANVI2 %in% c("Non-cMon") ~ "Non classical monocytes",
+  .default = umap$Cell_type_scANVI2
+) %>% as.factor()
+
+# umap$Cell_type_scANVI2 = ifelse(umap$Cell_type_scANVI2 %in% c("CD16- NK CD56+", "CD16+ IFNG+ NK",
+#                                                               "CD16+ NK"), "NK Cells", umap$Cell_type_scANVI2)
+# umap$Cell_type_scANVI2 = ifelse(umap$Cell_type_scANVI2 %in% c("cMon_1", "cMon_2",
+#                                                               "Mon_SIRPA"), "Classical Monocytes", umap$Cell_type_scANVI2)
+# umap$Cell_type_scANVI2 = str_replace(umap$Cell_type_scANVI2, "MAIT.*$", "MAIT cells")
+# umap$Cell_type_scANVI2 = str_replace(umap$Cell_type_scANVI2, "Memory B cells.*$", "Memory B cells")
+# umap$Cell_type_scANVI2 = str_replace(umap$Cell_type_scANVI2, "Tcm/Naive cytotoxic.*$", "Tcm/Naive cytotoxic")
+# umap$Cell_type_scANVI2 = str_replace(umap$Cell_type_scANVI2, "Tem/Temra cytotoxic T cells", "Tem/Temra cytotoxic")
+# umap$Cell_type_scANVI2 = str_replace(umap$Cell_type_scANVI2, "γδ T.*", "γδ T cells")
+
+
+unique(umap$Cell_type_scANVI2) %>% sort()
+```
+#### Figure 1B
+
+```{r fig.width= 10, fig.height=10}
+
+# colourCount = length(unique(umap$Cell_type_scANVI2))
+#   
+# getPalette = colorRampPalette(vega_20)
+# 
+# #getPalette = colorRampPalette(brewer.pal(12, "Paired"))
+#   
+# #Palette = getPalette(colourCount)
+# 
+# 
+# Palette= c("#1EB1D1","#C78948","#879CC7","#8688DD","#60A6A1","#B15928","#FEDDC9","#898B6C","#60F851","#919D5F","#CB9B7F","#F26E6E","#FDA746","#EB0000","#A44444","#ABCDEF","#F06C45","#F79C5D","#8861AC","#1E9425","#AF820B","#AB8BA2","#E39970","#D0A9AE","#6C409B","#917099","#FEA8F9","#A483BE","#F4E98A","#8BC895")
+# 
+#   
+# names(Palette) = sort(unique(umap$Cell_type_scANVI2))
+
+
+Palette = vega_20[1:length(unique(umap$Cell_type_scANVI2))]
+names(Palette) = sort(unique(umap$Cell_type_scANVI2)) 
+
+
+umap_pbmc = plot_umap(
+  umap_data = umap[umap$Cell_type_scANVI != "CCR7_CDE3", ],
+  cluster = "Cell_type_scANVI2",
+  umap_1 = "umap1",
+  umap_2 = "umap2",
+  selected_clusters = "all",
+  shape.size = 0.5,
+  cluster_palette = Palette,
+  arrow.length = 3,
+  repel_text_size = 6,
+  repel = "label",
+  font = "plain",
+  fill = alpha("white", 0.8),
+  color = "black",
+  axis.lab.size = 5
+)
+
+umap_pbmc
+
+
+ggsave(
+  str_glue(
+    "{figurePath}UMAP_T_cellsoid_B_T_From_PBMC.png"
+  ),
+  width = 10,
+  height = 10,
+  bg = 'transparent'
+)
+  
+```
+
+### Cell abundance
+
+#### Figure 1C
+
+```{r fig.fullwidth = TRUE, fig.width=10, fig.height=11}
+myobs = umap %>% filter(!(disease_short %in% c("asthma"))) %>% group_by(Cell_type_scANVI2, disease_short) %>% summarise(Cell_count=n())
+
+#my_obs$tissue = ifelse(my_obs$tissue == "Macrophage", "Synovium", as.character(my_obs$tissue))
+
+# myobs$Cell_type_scANVI2 = case_when(
+#   myobs$Cell_type_scANVI2 %in% c(
+#     "GZMK producing CD4",
+#     "Tem cytotoxic",
+#     "Tcm/Naive cytotoxic",
+#      "Tcm/Naive cytotoxic 1",
+#      "Tcm/Naive cytotoxic 2",
+#     "Tem/Temra cytotoxic",
+#     "Tem/Trm cytotoxic T cells",
+#     "Tem/Temra cytotoxic T cells"
+#   ) ~ "CD8 T cells",
+#   myobs$Cell_type_scANVI2 %in% c(
+#     "Tcm/Naive h activated",
+#     "Tcm CCR6",
+#     "Tcm/Naive helper"
+#   ) ~ "CD4 T cells",
+#   myobs$Cell_type_scANVI2 %in% c("NKT", "CD16+ NK", "CD16- NK CD56+", "Cycling NK", "CD16+ IFNG+ NK") ~ "NK cells",
+#   #myobs$Cell_type_scANVI2 %in% c("DC1", "DC2", "pDC") ~ "DC",
+#   myobs$Cell_type_scANVI2 %in% c("Naive B cells", "Memory B cells_2", "Memory B cells_1", "B cells_CR1", "ABC") ~ "B cells",
+#   myobs$Cell_type_scANVI2 %in% c("γδ T cells", "MAIT cells", "DN") ~ "Unconventional T cells",
+#   #myobs$Cell_type_scANVI2 %in% c("γδ T ZNF683+", "γδ T") ~ "γδ T cells",
+#   #myobs$Cell_type_scANVI2 %in% c("MAIT cells", "MAIT_act") ~ "MAIT cells",
+#   myobs$Cell_type_scANVI2 %in% c("cMon_1", "cMon_2", "CCR7_CDE3", "Mon_SIRPA") ~ "Classical monocytes",
+#   myobs$Cell_type_scANVI2 %in% c("Non-cMon") ~ "Non classical monocytes",
+#   .default = myobs$Cell_type_scANVI2
+# ) %>% as.factor()
+
+
+myobs$disease_short = str_replace(myobs$disease_short, "CD", "IBD") %>% as.factor()
+myobs$disease_short = str_replace(myobs$disease_short, "spondoarthritis", "Spondyloarthritis") %>% as.factor()
+myobs$disease_short = str_replace(myobs$disease_short, "hashimoto", "Hashimoto's thyroiditis") %>% as.factor()
+myobs$disease_short = str_replace(myobs$disease_short, "sjo_syndr", "Sjögren's Syndrome") %>% as.factor()
+
+myobs$disease_short = factor(myobs$disease_short, levels = c("Healthy", sort(as.character(unique(myobs$disease_short[myobs$disease_short!="Healthy"])))))
+
+Palette = vega_20[1:length(unique(myobs$Cell_type_scANVI2))]
+names(Palette) = sort(unique(myobs$Cell_type_scANVI2)) 
+
+
+abund_plot = plot_abundance_bar(
+  data = myobs,
+  count.on.top = TRUE,
+  text.size = 7,
+  axis.text.size = 20,
+  key.size = 0.9,
+  fill_column = "Cell_type_scANVI2",
+  y_column = "Cell_count",
+  x_column = "disease_short",
+  y_label = "Composition (%)",
+  fill_label = "Cellular compartment",
+  margin.bottom = 0,
+  margin.top = 60,
+  margin.right = 0,
+  margin.left = 60,
+  Palette = Palette
+)
+
+abund_plot
+ggsave(str_glue("{figurePath}/Myeloid_B_T_From_PBMC_abundance.svg"),
+       bg='transparent',
+       width = 10,
+       height = 10)
+```
+
+### Broad Myeloid_T_B cells
+
+```{r}
+myobs <- myobs %>%
+  mutate(
+    Cell_type_scANVI3 = case_when(
+      Cell_type_scANVI2 %in% c(
+        "B cells",
+        "Cycling B cells",
+        "Plasma cells"
+      ) ~ "B cells",
+
+      Cell_type_scANVI2 %in% c(
+        "CD4 T cells",
+        "CD8 T cells",
+        "Cycling T cell",
+        "TCD4_CD8",
+        "Tregs",
+        "Unconventional T cells"
+      ) ~ "T cells",
+
+      Cell_type_scANVI2 == "NK cells" ~ "NK cells",
+
+      Cell_type_scANVI2 %in% c(
+        "Classical monocytes",
+        "Non classical monocytes",
+        "DC1",
+        "DC2",
+        "pDC"
+      ) ~ "Myeloid cells",
+
+      TRUE ~ NA_character_
+    )
+  )
+
+myobs$Cell_type_scANVI4 <- factor(
+  myobs$Cell_type_scANVI3,
+  levels = c(
+    "B cells",
+    "T cells",
+    "NK cells",
+    "Myeloid cells"
+  )
+)
+
+unique(myobs$Cell_type_scANVI4)
+```
+
+```{r fig.fullwidth = TRUE, fig.width=9, fig.height=9}
+
+plot_abundance_bar(
+  data = myobs,
+  count.on.top = TRUE,
+  text.size = 7,
+  axis.text.size = 20,
+  key.size = 0.9,
+  fill_column = "Cell_type_scANVI4",
+  y_column = "Cell_count",
+  x_column = "disease_short",
+  y_label = "Composition (%)",
+  fill_label = "Cellular compartment",
+  margin.bottom = 0,
+  margin.top = 60,
+  margin.right = 0,
+  margin.left = 60,
+  Palette = lineage3
+)
+
+ggsave(str_glue("{figurePath}/Broad_T_cellsoid_B_T_From_PBMC_abundance.png"),
+       bg='transparent',
+       width = 9,
+       height = 9)
+```
+
+
+
+## Figure 1F
+
+```{r}
+umap <- read.csv("C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/sanger_gdrive/Projects/SCVI_Results/Milo_combine/Obs_Myeloid_B_T_From_Tissue_label_transfert_Subset_annotated_Milo_3K_with_UMAP_from_gpu_with_Skin_data.csv")
+
+umap = umap %>% mutate(
+  disease_harmo = case_when(
+    disease_short_2 == "" ~ disease_status,
+    TRUE ~ disease_short_2
+  )
+)
+
+unique(umap$disease_harmo)
+
+umap$disease_harmo = str_replace(umap$disease_harmo, "CD", "IBD") %>% as.factor()
+umap$disease_harmo = str_replace(umap$disease_harmo, "spondyloarhtriti", "Spondyloarthritis") %>% as.factor()
+umap$disease_harmo = str_replace(umap$disease_harmo, "hashimoto", "Hashimoto's thyroiditis") %>% as.factor()
+
+unique(umap$disease_harmo)
+
+```
+
+
+```{r fig.fullwidth = TRUE, fig.width=18, fig.height=26}
+res <- study_composition_ch(data = umap, 
+                       disease_col    = "disease_harmo",
+                       tissue_col     = "tissue_harmo",
+                       cell_width = 4,
+                       cell_height = 3, 
+                       cell_fontsize = 35, 
+                       name_fontsize = 35,
+                       low_col = "#E5E7EB",
+                       mid_col = "#9CA3AF",
+                       high_col = "#374151",
+                       flip = FALSE,
+                       wrap_rows = 15,
+                       lwd_size = 1.5
+                       )
+draw_composition_ch(res)
+
+figurePath = "C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/sanger_gdrive/Projects/SCVI_Results/All_Tissue_or_Nonimmune/Subset_Reintegrated_full/Figures"
+
+save_composition_ch(
+  res,
+  file = str_glue(
+    "{figurePath}/Dataset_from_Tissue_label_transfert_Subset_annotated_Milo_3K_with_UMAP_study_composition.png"
+  ),
+  width = 18,
+  height = 26
+)
+
+save_composition_ch(
+  res,
+  file = str_glue(
+    "{figurePath}/Dataset_from_Tissue_label_transfert_Subset_annotated_Milo_3K_with_UMAP_study_composition.svg"
+  ),
+  width = 18,
+  height = 26,
+  background = "white"
+)
+
+```
+

@@ -1,0 +1,12 @@
+[2026-08-06 14:47:26] [INFO]    [OmnipathR] Welcome to OmnipathR!
+[2026-08-06 14:47:26] [TRACE]   [OmnipathR] Reading JSON from `C:\Users\bidos\AppData\Local\cache\OmnipathR/cache.json` (encoding: UTF-8).
+[2026-08-06 14:47:26] [TRACE]   [OmnipathR] JSON validation successful: TRUE
+[2026-08-06 14:47:26] [INFO]    [OmnipathR] Initialized cache: `C:\Users\bidos\AppData\Local\cache\OmnipathR`.
+[2026-08-06 14:47:26] [TRACE]   [OmnipathR] Reading JSON from `C:/Users/bidos/AppData/Local/R/win-library/4.2/OmnipathR/db/db_def.json` (encoding: UTF-8).
+[2026-08-06 14:47:26] [TRACE]   [OmnipathR] JSON validation successful: TRUE
+[2026-08-06 14:47:26] [TRACE]   [OmnipathR] Reading JSON from `C:/Users/bidos/AppData/Local/R/win-library/4.2/OmnipathR/internal/magic_bytes.json` (encoding: UTF-8).
+[2026-08-06 14:47:26] [TRACE]   [OmnipathR] JSON validation successful: TRUE
+[2026-08-06 14:47:26] [TRACE]   [OmnipathR] Reading JSON from `C:/Users/bidos/AppData/Local/R/win-library/4.2/OmnipathR/internal/urls.json` (encoding: UTF-8).
+[2026-08-06 14:47:26] [TRACE]   [OmnipathR] JSON validation successful: TRUE
+[2026-08-06 14:47:26] [TRACE]   [OmnipathR] Reading JSON from `C:/Users/bidos/AppData/Local/R/win-library/4.2/OmnipathR/internal/id_types.json` (encoding: UTF-8).
+[2026-08-06 14:47:26] [TRACE]   [OmnipathR] JSON validation successful: TRUE

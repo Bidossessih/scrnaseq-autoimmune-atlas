@@ -1,0 +1,952 @@
+---
+title: "Differential expression of Milo nhoods"
+author: "Bidossessi Hounkpe"
+date: "25/08/2023"
+format: html
+  df-print: kable
+editor: visual
+---
+
+```{r}
+rm(list = ls())
+```
+
+```{r}
+library(tidyverse)
+library(SingleCellExperiment)
+library(Matrix)
+library(scran)
+library(scuttle)
+library(glmGamPoi)
+library(edgeR)
+library(ggbeeswarm)
+library(ComplexHeatmap)
+
+basepath <- "C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/scripts/scrnaseq-autoimmune-atlas/notebooks/4-R/"
+
+# DEG
+
+source(str_glue(basepath, "deg_fun.R"))
+
+
+#### Windows
+source(str_glue(basepath, "colors.R"))
+
+# Source helper functions
+
+source(str_glue(basepath, "helper_fun.R"))
+
+# Source plotting code
+source(str_glue(basepath, "Milo_horizontal_plot.R"))
+
+# Network expansion 
+
+#source("C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/scripts/autoimmuneSC/Integrated/R/openTarget.R")
+
+figurePath = "C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/sanger_gdrive/Projects/SCVI_Results/Immune_compartment_PBMC/Subset_Agosto_2023/Figures/"
+```
+
+### Figure 5A: Milo plot
+
+```{r fig.fullwidth = TRUE, fig.width=55, fig.height=30}
+
+
+h5ad_path = 'C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/sanger_gdrive/Projects/SCVI_Results/Immune_compartment_PBMC/Subset_Agosto_2023/Milo/'
+
+compare_disease_df = read.csv(str_glue("{h5ad_path}T_cell_From_PBMC_label_transfer_Milo_2K.csv"))
+
+
+unique(compare_disease_df$disease)
+compare_disease_df$Sig = ifelse(compare_disease_df$Sig == "True", TRUE, FALSE)
+
+compare_disease_df$nhood_annotation = str_replace(compare_disease_df$nhood_annotation, "Tem/Temra cytotoxic T cells", "Tem/Temra cytotoxic")
+
+compare_disease_df$nhood_annotation = str_replace(compare_disease_df$nhood_annotation, "Tcm/Naive cytotoxic 1", "Tcm/Naive cytotoxic")
+
+compare_disease_df$nhood_annotation = str_replace(compare_disease_df$nhood_annotation, "Tcm/Naive cytotoxic 2", "Tcm/Naive cytotoxic")
+
+print(table(compare_disease_df$disease))
+
+#### Prepare data
+
+nhoo_prep = prep_nhoo(nhood_res=compare_disease_df, condition = "disease", Sig = "Sig", thres = 0.1,
+                     dis_pref = "all_", index_cell = "index_cell", 
+                     nhood_annotation="nhood_annotation", n_shared=0,
+                     SpatialFDR = "SpatialFDR", logFC = "logFC", order_by_kth = FALSE)
+  
+nhoo_prep$condition = str_replace(nhoo_prep$condition, "hashimoto", "Hashimoto thyroiditis")
+nhoo_prep$condition = str_replace(nhoo_prep$condition, "psoriatic_arthritis", "Psoriatic arthritis")
+nhoo_prep$condition = str_replace(nhoo_prep$condition, "sjo_syndr", "Sjögren's syndrome")
+nhoo_prep$condition = str_replace(nhoo_prep$condition, "spondoarthritis", "Spondyloarthritis")
+nhoo_prep$condition = str_replace(nhoo_prep$condition, "CD_and_Spondoarthritis", "IBD_and_Spondyloarthritis")
+nhoo_prep$condition = str_replace(nhoo_prep$condition, "Oligo_JIA", "Oligoarticular JIA")
+
+nhoo_prep$condition = str_replace(nhoo_prep$condition, "CD", "IBD") %>% as.factor()
+
+
+left.annot = c(
+  "Hashimoto thyroiditis" = "Thyroid",
+  IBD = "Colon",
+  IBD_and_Spondyloarthritis = "Colon",
+  "Oligoarticular JIA" = "Synovial fluid",
+  "Psoriatic arthritis" = "Synovial membrane",
+  "Sjögren's syndrome" = "Blood",
+  SLE = "Blood", 
+  Spondyloarthritis = "Blood"
+)
+
+nhoo_prep1 = nhoo_prep[nhoo_prep$condition!="asthma",]
+
+nhoo_prep1$condition = droplevels(nhoo_prep1$condition)
+#nhoo_prep1$nhood_annotation = droplevels(nhoo_prep1$nhood_annotation)
+
+milo_hori_plot = milo_plot_horizontal(
+  nhoo_prep = nhoo_prep,
+  rel_widths = c(0.25, 1, 0.25),
+  anot_bar_height = 0.05,
+  col.pal = color_cell_pbmc,
+  label_size = 35,
+  annot_size = 30,
+  annot_col = "black",
+  annot.bar.height = 0.5,
+  expand_y_sc = 0.1,
+  legend.key.size = unit(2, "cm"),
+  legend.text = element_text(size = 60),
+  legend.title = element_text(size = 60, face = "bold"),
+  legend.position = "bottom",
+  legend.box.spacing = unit(6, 'cm'),
+  legend.spacing =5,
+  fc_legend.size =5,
+  fc_annot_size = 60,
+  legend.margin.custom = -200,
+  dendro.width = 3,
+  bar.title = "Blood",
+  y.axis.label = "Comparative neighbourhood \nabundance",
+  y.axis.label.size = 35,
+  left.annot = NULL
+) +
+  guides(fill = guide_legend(title.position="top", title.hjust = 0.5, ncol = 3))
+
+
+milo_hori_plot
+
+
+```
+
+```{r}
+ggsave(str_glue("{figurePath}Milo_T_Cell_From_PBMC_compareDisease.png"), width = 55, height = 30, bg='transparent', limitsize = FALSE)
+ggsave(str_glue("{figurePath}Milo_T_Cell_From_PBMC_compareDisease.svg"), width = 55, height = 30, bg='transparent', limitsize = FALSE)
+```
+
+
+
+### Data loading and preparation
+
+```{r}
+#sce_path = "/nfs/team205/bh14/Datasets/Remapped/raw_adata/SCVI_Results/All_Tissue_or_Nonimmune/Subset_Reintegrated_full/Milo/enriched_depleted_SCE/"
+
+sce_path = "G:/My Drive/Projects/SCVI_Results/Immune_compartment_PBMC/Subset_Agosto_2023/Milo/individual_disease_nhoo/"
+
+# 
+
+load(str_glue("{sce_path}Pseudo_test_adata_T_cell_PBMC.RData"))
+
+test_adata_$donor_id = factor(gsub(" ", "_", test_adata_$donor_id))
+
+test_adata_$donor_id = factor(gsub("-", "_", test_adata_$donor_id))
+
+test_adata_$disease_short = droplevels(test_adata_$disease_short)
+
+unique(test_adata_$Cell_type_scANVI)
+```
+
+```{r}
+table(test_adata_$disease_short, test_adata_$Cell_type_scANVI)
+```
+
+```{r}
+table(test_adata_$nhoo_test_condition, test_adata_$Cell_type_scANVI)
+```
+
+```{r}
+my_obs = read.csv("G:/My Drive/Projects/SCVI_Results/Immune_compartment_PBMC/Subset_Agosto_2023/Milo/individual_disease_nhoo/PBMC_T_cell_individual_disease_Milo_adata_reajusted.csv")
+
+table(my_obs$Cell_type_scANVI)
+
+
+
+```
+
+```{r}
+
+my_obs$disease_short = str_remove(my_obs$disease_short, "all_")
+my_obs$disease_short = str_replace(my_obs$disease_short, "hashimoto", "Hashimoto thyroiditis")
+my_obs$disease_short = str_replace(my_obs$disease_short, "psoriatic_arthritis", "Psoriatic arthritis")
+my_obs$disease_short = str_replace(my_obs$disease_short, "sjo_syndr", "Sjögren's syndrome")
+my_obs$disease_short = str_replace(my_obs$disease_short, "CD_and_Spondoarthritis", "IBD_and_Spondyloarthritis")
+my_obs$disease_short = str_replace(my_obs$disease_short, "spondoarthritis", "Spondyloarthritis")
+my_obs$disease_short = str_replace(my_obs$disease_short, "Oligo_JIA", "Oligoarticular JIA")
+
+my_obs$disease_short = str_replace(my_obs$disease_short, "CD", "IBD") %>% as.factor()
+
+my_obs$Cell_type_scANVI = str_replace(my_obs$Cell_type_scANVI, "Tem/Temra_cytotoxic_T_cells", "Tem/Temra_cytotoxic")
+
+my_obs$Cell_type_scANVI = str_replace(my_obs$Cell_type_scANVI, "Tcm/Naive_cytotoxic_1", "Tcm/Naive_cytotoxic")
+
+my_obs$Cell_type_scANVI = str_replace(my_obs$Cell_type_scANVI, "Tcm/Naive_cytotoxic_2", "Tcm/Naive_cytotoxic") %>% as.factor()
+
+levels(my_obs$disease_short)
+
+#my_obs$Cell_type_scANVI = str_replace_all(my_obs$Cell_type_scANVI, " ", "_")
+```
+
+```{r}
+my_obs$disease_dataset=paste0(my_obs$disease_short, "_", my_obs$dataset_id)
+```
+
+```{r}
+table(my_obs$disease_dataset, my_obs$Cell_type_scANVI)
+```
+
+#### Abundance Plot
+
+```{r}
+levels(test_adata_$Cell_type_scANVI)
+```
+
+```{r}
+table(my_obs$dataset_id, my_obs$disease_short)
+```
+
+```{r fig.fullwidth = TRUE, fig.width=12, fig.height=15}
+
+my_obs %>% filter(disease_short != "asthma") %>% 
+dplyr::select(dataset_id, disease_short, Cell_type_scANVI) %>% mutate(dataset_id = str_remove(dataset_id, "GSE[0-9]*_{1}")) %>% 
+  group_by(dataset_id, Cell_type_scANVI, disease_short) %>% mutate(count = n()) %>% unique() %>%
+  ggplot(aes(fill=str_replace_all(Cell_type_scANVI, " ", "_"), y=count, x= reorder(disease_short, count))) + 
+  geom_bar(position="stack", stat="identity", color = "white") + 
+  labs(x = "", y = "Composition", fill = "Cellular \n compartment") +
+  facet_wrap(~ dataset_id, scales = "free", ncol = 3) +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.05))) +
+  theme_bw() + #coord_flip() +
+  scale_fill_manual(values = color_cell_pbmc) +
+  scale_x_reordered() +
+  theme(
+    axis.text.x = element_text(
+      hjust = 1,
+      vjust = 0.5,
+      size = 12,
+      angle = 90
+    ),
+    axis.text.y = element_text(size = 12, color = "black"),
+    legend.key.size = unit(0.6, 'cm'),
+    legend.text = element_text(size = 10),
+    #axis.line = element_line(colour = "black", linewidth = 0.6),
+    legend.key.width = unit(0.4, "cm"),
+    axis.ticks.x = element_blank(),
+    panel.grid = element_blank(),
+    legend.key.height = unit(0.4, "cm")
+  )
+
+```
+
+```{r fig.fullwidth = TRUE, fig.width=12, fig.height=25}
+my_obs_0_2 = my_obs[my_obs$disease_short != "asthma",]
+
+
+my_obs_0_2$disease_short = as.factor(my_obs_0_2$disease_short)
+
+my_obs_0_2$donor_nhoo = paste0(my_obs_0_2$donor_id, "_", my_obs_0_2$nhoo_test_condition)
+
+my_obs_0_2 = my_obs_0_2 %>% dplyr::select(donor_id, donor_nhoo, disease_short, Cell_type_scANVI, nhoo_test_condition) %>% 
+  # Number of cells per donor in each cell type
+  group_by(donor_nhoo, Cell_type_scANVI, disease_short) %>% mutate(total_per_donor_per_celltype = n()) %>% unique() %>%  
+  # total number of cells per donor
+  group_by(donor_id) %>% mutate(Cell_count_per_donor=sum(total_per_donor_per_celltype)) %>% unique() %>% ungroup() %>% 
+  # Cells per 1000
+  mutate(Cell_per_1000=total_per_donor_per_celltype*1000/Cell_count_per_donor) %>% unique() %>% 
+  group_by(donor_id) %>% mutate(dsum = sum(Cell_per_1000)) %>% 
+  # number of cell per nhood per disease
+  group_by(disease_short, Cell_type_scANVI, nhoo_test_condition) %>% mutate(norm_Cell_count_per_nhood_disease=mean(Cell_per_1000))
+
+#some donors have only one cell type (Cell_per_1000==1000)
+
+my_obs_0_3 = unique(my_obs_0_2[,c(3:5,10)])
+
+ggplot(my_obs_0_3, aes(fill=nhoo_test_condition, y=norm_Cell_count_per_nhood_disease, x=reorder_within(x = disease_short, by = norm_Cell_count_per_nhood_disease, within = Cell_type_scANVI, fun = median))) + 
+  geom_bar(position="stack", stat="identity") + 
+    #geom_col(width = 0.4) +
+    labs(x = "", y = "Cells count/1000 cells", fill = "Cellular \n compartment") +
+    #scale_y_continuous(expand = c(0,1)) +
+    #scale_fill_manual(values=celcolormap) +
+  facet_wrap(~ Cell_type_scANVI, scales = "free", ncol = 4) +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.05))) +
+  theme_bw() + #coord_flip() +
+  scale_x_reordered() +
+  #geom_text(aes(label = after_stat(y), group = disease_short), 
+            #stat = 'summary', fun = sum, vjust = -0.2, hjust = 0.5) +
+  theme(
+    axis.text.x = element_text(
+      hjust = 1,
+      vjust = 0.5,
+      size = 12,
+      angle = 90
+    ),
+    axis.text.y = element_text(size = 12, color = "black"),
+    legend.key.size = unit(0.6, 'cm'),
+    legend.text = element_text(size = 10),
+    #axis.line = element_line(colour = "black", linewidth = 0.6),
+    legend.key.width = unit(0.4, "cm"),
+    axis.ticks.x = element_blank(),
+    panel.grid = element_blank(),
+    legend.key.height = unit(0.4, "cm")
+  )
+
+
+#ggsave(str_glue("{figurePath}Cell_per_donor_Milo_myel_From_Tissue_compareDisease_All_Macrophage.svg"), width = 18, height = 16, bg='transparent')
+
+#ggsave(str_glue("{figurePath}Cell_per_donor_Milo_myel_From_Tissue_compareDisease_All_Macrophage.png"), width = 18, height = 16, bg='transparent')
+
+```
+
+### Figure 5B
+
+```{r fig.fullwidth = TRUE, fig.width=15, fig.height=16}
+my_obs_0_2 = my_obs[my_obs$disease_short != "asthma",]
+
+
+my_obs_0_2$disease_short = as.factor(my_obs_0_2$disease_short)
+
+my_obs_0_2 = my_obs_0_2 %>% dplyr::select(donor_id, disease_short, Cell_type_scANVI) %>% 
+  # Number of cells per donor in each cell type
+  group_by(donor_id, Cell_type_scANVI, disease_short) %>% mutate(total_per_donor_per_celltype = n()) %>% unique() %>%  
+  # total number of cells per donor
+  group_by(donor_id) %>% mutate(Cell_count_per_donor=sum(total_per_donor_per_celltype)) %>% unique() %>% ungroup() %>% 
+  # Cells per 1000
+  mutate(Cell_per_1000=total_per_donor_per_celltype*1000/Cell_count_per_donor) %>% unique()
+
+#some donors have only one cell type (Cell_per_1000==1000)
+myobs$disease_short = factor(myobs$disease_short, c("Healthy", sort(levels(myobs$disease_short)[levels(myobs$disease_short) != "Healthy"])))
+my_obs_0_2$disease_short = factor(my_obs_0_2$disease_short, c("Healthy", sort(levels(my_obs_0_2$disease_short)[levels(my_obs_0_2$disease_short) != "Healthy"])))
+
+plot_facet_cell = ggplot(my_obs_0_2,
+                         aes(y = Cell_per_1000, x = disease_short, fill = disease_short)) + #reorder_within(x = disease_short, by = Cell_per_1000, within = Cell_type_scANVI, fun = mean))) +
+  geom_boxplot() +
+  #geom_beeswarm(stat="identity") +
+  
+  labs(x = "Diseases",
+       y = "Cell/1000 per donor",
+       fill = "Disease",
+       title = "T cells composition across diseases") +
+  facet_wrap( ~ Cell_type_scANVI, scales = "free_y", ncol = 4) +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.05))) +
+  theme_bw() + #coord_flip() +
+  #scale_x_reordered() +
+  scale_fill_manual(values = color_disease_pbmc) +
+  theme(
+    axis.text.x = element_text(
+      hjust = 1.05,
+      vjust = 1,
+      size = 15,
+      angle = 62
+    ),
+    
+    axis.text.y = element_text(size = 15),
+    strip.text = element_text(size = 15),
+    plot.title = element_text(size = 20),
+    axis.title = element_text(size = 15),
+    legend.key.size = unit(0.6, 'cm'),
+    legend.text = element_text(size = 10),
+    panel.background = element_rect(fill = 'transparent'),
+    #transparent panel bg
+    plot.background = element_rect(fill = 'transparent', color = NA),
+    #transparent plot bg
+    legend.background = element_rect(fill = 'transparent'),
+    #transparent legend bg
+    legend.box.background = element_rect(fill = 'transparent')
+  )
+
+
+
+plot_facet_cell
+
+ggsave(str_glue("{figurePath}Cell_per_donor_Milo_myel_From_PBMC_All_T_cells.svg"), width = 15, height = 16, bg='transparent')
+
+ggsave(str_glue("{figurePath}Cell_per_donor_Milo_myel_From_PBMC_All_T_cells.png"), width = 15, height = 16, bg='transparent')
+
+```
+
+### Cell abundance across diseases
+
+```{r fig.fullwidth = TRUE, fig.width=10, fig.height=6}
+myobs = my_obs %>% filter(!disease_short%in%c("asthma")) %>% group_by(Cell_type_scANVI, disease_short) %>% summarise(Cell_count=n())
+
+#my_obs$tissue = ifelse(my_obs$tissue == "Macrophage", "Synovium", as.character(my_obs$tissue))
+
+temp = myobs %>%
+  group_by(disease_short) %>% 
+  mutate(total=sum(Cell_count)) %>% 
+  dplyr::select(disease_short, total) %>% unique()
+
+#head(my_obs)
+
+myobs$disease_short = factor(myobs$disease_short, levels = c("Healthy", sort(as.character(unique(myobs$disease_short[myobs$disease_short!="Healthy"])))))
+
+celcompodisease = ggplot(myobs, aes(y = Cell_count, x = disease_short)) +
+  coord_cartesian(clip = "off") +
+  geom_bar(position = "fill", stat = "identity", aes(fill = Cell_type_scANVI)) +
+  geom_text(
+    data = temp,
+    aes(x = disease_short, y = Inf, label = total),
+    vjust = 0,
+    hjust = 0,
+    angle = 45,
+    size = 5
+  ) +
+  #geom_col(width = 0.4) +
+  labs(x = "", y = "Composition (%)", fill = "Cellular compartment") +
+  scale_y_continuous(expand = c(0,0)) +
+  scale_fill_manual(values = color_cell_pbmc) +
+  theme_bw() + #coord_flip() +
+  theme(
+    axis.text.x = element_text(
+      hjust = 1,
+      vjust = 1,
+      size = 15,
+      angle = 50
+    ),
+    plot.margin = margin(40, 0, 0, 0, unit = "pt"),
+    axis.text.y = element_text(size = 15),
+    axis.title = element_text(size = 15),
+    #legend.key.size = unit(0.6, 'cm'),
+    legend.text = element_text(size = 15),
+    legend.title = element_text(size = 15),
+    axis.line = element_line(colour = "black", linewidth = 0.6),
+    legend.key.width = unit(0.6, "cm"),
+    legend.key.height = unit(0.6, "cm")
+  ) #+ scale_colour_brewer(palette = "Paired")
+
+celcompodisease
+
+
+ggsave(str_glue("{figurePath}/T_cells_abundance_Disease_PBMCs.png"), width = 10, height = 6, bg='transparent')
+```
+
+```{r fig.fullwidth = TRUE, fig.width=12, fig.height=6}
+
+celcompodisease2 = ggplot(myobs, aes(fill=Cell_type_scANVI, y=Cell_count, x=reorder(disease_short, Cell_count))) + 
+    geom_bar(position="stack", stat="identity") + 
+    #geom_col(width = 0.4) +
+    labs(x = "", y = "Composition", fill = "Cellular compartment") +
+    #scale_y_continuous(expand = c(0,1)) +
+    scale_fill_manual(values=color_cell_pbmc) +
+    theme_bw() + #coord_flip() +
+    geom_text(aes(label = after_stat(y), group = disease_short), 
+              stat = 'summary', fun = sum, vjust = -0.2, hjust = 0.5) +
+    theme(axis.text.x = element_text(hjust=1, vjust = 0.5, size = 15, angle = 90),
+          axis.text.y = element_text(size=15),
+          axis.title = element_text(size=15),
+         legend.key.size = unit(0.6, 'cm'),
+         legend.text = element_text(size=15),
+         legend.title = element_text(size=15),
+         axis.line = element_line(colour = "black", linewidth = 0.6),
+         legend.key.width = unit(0.6, "cm"),
+         legend.key.height = unit(0.6, "cm")) #+ scale_colour_brewer(palette = "Paired") 
+    
+celcompodisease2
+
+
+ggsave(str_glue("{figurePath}T_cells_abundance_Disease_PBMCs_Stack.png"), width = 12, height = 6, bg='transparent')
+```
+
+```{r}
+unique(my_obs$Cell_type_scANVI)
+```
+
+```{r}
+unique(my_obs$disease_short)
+```
+
+##### Intermediate macrophage
+
+```{r fig.fullwidth = TRUE, fig.width=5, fig.height=7}
+named_cell = c(
+  "CD16__NK_CD56_plus" = "CD16- NK CD56+",
+  "CD16_plus_IFNG_plus_NK" = "CD16+IFNG+NK",
+  "CD16_plus_NK" = "CD16+NK",
+  "Cycling_NK" = "Cycling NK",
+  "Cycling_T_cell" = "Cycling T cell",
+  "DN" = "DN",
+  "GZMK_producing_CD4" = "GZMK producing CD4",
+  "MAIT_act" = "Activated MAIT",
+  "MAIT_cells" = "MAIT cells",
+  "NKT" = "NKT",
+  "TCD4_CD8" = "TCD4/CD8",
+  "Tcm/Naive_cytotoxic" = "Tcm/Naive cytotoxic",
+  "Tcm/Naive_h_activated" = "Tcm/Activated Naive helper",
+  "Tcm/Naive_helper" = "Tcm/Naive helper",
+  "Tcm_CCR6" = "Tcm CCR6+",
+  "Tem/Temra_cytotoxic" = "Tem/Temra cytotoxic",
+  "Tem/Trm_cytotoxic_T_cells" = "Tem/Trm cytotoxic",
+  "Tem_cytotoxic" = "Tem cytotoxic",
+  "Tregs" = "Regulatory T cells",
+  "γδ_T" = "γδ T cells",
+  "γδ_T_ZNF683_plus" = "γδ ZNF683+ T cell"
+)
+
+
+myobs$disease_short = factor(myobs$disease_short, c("Healthy", sort(levels(myobs$disease_short)[levels(myobs$disease_short) != "Healthy"])))
+
+
+for (cell in levels(myobs$Cell_type_scANVI)) {
+  print(str_glue("Plotting {cell}...."))
+  
+  p = plot_Cell_per_1000_per_donor(
+  data = my_obs_0_2[my_obs_0_2$Cell_type_scANVI == cell, ],
+  xlab = "",
+  disease_column="disease_short",
+  ylab = "Cell count/1000 cells",
+  color_dis_tis = color_disease_pbmc,
+  plot.title = named_cell[cell],
+  show.legend=F,
+  legend.keys.size = 0.8,
+  title.size = 17,
+  xfactor.level = levels(myobs$disease_short),
+  same.x.order = TRUE
+)
+  
+p
+ggsave(str_glue("{figurePath}Cell_per_1000_per_donor_facet_Milo_T_cells_From_PBMCs_compareDisease_{cell}.png"), width = 5, height = 7, bg='transparent')
+plot(p) 
+}
+```
+
+```{r fig.width=15, fig.height=5}
+#[my_obs$dataset_id %in% c("GSE157278_Hong_2020", "GSE163314_Lefferts_2021", "Perez_2022") &
+
+my_obs$Cell_type_scANVI = as.factor(my_obs$Cell_type_scANVI)
+
+my_obs$disease_short = factor(my_obs$disease_short, c("Healthy", sort(levels(my_obs$disease_short)[levels(my_obs$disease_short) != "Healthy"])))
+
+
+named_cell = c(
+  "CD16__NK_CD56_plus" = "CD16- NK CD56+",
+  "CD16_plus_IFNG_plus_NK" = "CD16+IFNG+NK",
+  "CD16_plus_NK" = "CD16+NK",
+  "Cycling_NK" = "Cycling NK",
+  "Cycling_T_cell" = "Cycling T cell",
+  "DN" = "DN",
+  "GZMK_producing_CD4" = "GZMK producing CD4",
+  "MAIT_act" = "Activated MAIT",
+  "MAIT_cells" = "MAIT cells",
+  "NKT" = "NKT",
+  "TCD4_CD8" = "TCD4/CD8",
+  "Tcm/Naive_cytotoxic" = "Tcm/Naive cytotoxic",
+  "Tcm/Naive_h_activated" = "Tcm/Activated Naive helper",
+  "Tcm/Naive_helper" = "Tcm/Naive helper",
+  "Tcm_CCR6" = "Tcm CCR6+",
+  "Tem/Temra_cytotoxic" = "Tem/Temra cytotoxic",
+  "Tem/Trm_cytotoxic_T_cells" = "Tem/Trm cytotoxic",
+  "Tem_cytotoxic" = "Tem cytotoxic",
+  "Tregs" = "Regulatory T cells",
+  "γδ_T" = "γδ T cells",
+  "γδ_T_ZNF683_plus" = "γδ ZNF683+ T cell"
+)
+
+for (cel in levels(my_obs$Cell_type_scANVI)) {
+  print(str_glue("Plotting {cel}...."))
+  
+  p = my_obs[my_obs$Cell_type_scANVI == cel &
+               my_obs$dataset_id != "Braga_asthma_CD4",] %>%
+    dplyr::select(nhoo_test_condition,
+                  dataset_id,
+                  disease_short,
+                  Cell_type_scANVI) %>% mutate(dataset_id = str_remove(dataset_id, "GSE[0-9]*_{1}")) %>% mutate(dataset_id = str_remove(dataset_id, "E-MTAB-[0-9]*_{1}")) %>%
+    group_by(nhoo_test_condition,
+             dataset_id,
+             Cell_type_scANVI,
+             disease_short) %>% mutate(count = n()) %>% unique() %>%
+    ggplot(aes(fill = nhoo_test_condition, y = count, x = disease_short)) +
+    geom_bar(position = "stack",
+             stat = "identity",
+             color = "white") +
+    labs(x = "", y = "Nhood Composition", fill = "nhood", title = named_cell[cel]) +
+    facet_wrap(~ dataset_id, scales = "free", ncol = 8) +
+    scale_y_continuous(expand = expansion(mult = c(0, 0.05))) +
+    theme_bw() + #coord_flip() +
+    scale_fill_manual(values = c(
+      Enriched = "darkgreen",
+      Depleted = "red",
+      Non_sig = "grey50"
+    )) + #459395 EB7C69 FDA638
+    ggforce::facet_row(vars(dataset_id), scales = 'free', space = 'free') +
+    theme(
+      axis.text.x = element_text(
+        hjust = 1,
+        vjust = 0.5,
+        size = 12,
+        angle = 90
+      ),
+      axis.text = element_text(size = 15, color = "black"),
+      axis.title = element_text(size = 15, color = "black"),
+      #axis.text.x.bottom = element_blank(),
+      legend.key.size = unit(0.6, 'cm'),
+      legend.text = element_text(size = 15, color = "black"),
+      legend.title = element_text(size = 15, color = "black"),
+      #axis.line = element_line(colour = "black", linewidth = 0.6),
+      legend.key.width = unit(0.4, "cm"),
+      axis.ticks.x = element_blank(),
+      panel.grid = element_blank(),
+      legend.key.height = unit(0.4, "cm"),
+      strip.text.x = element_text(size = 12)
+    )
+  
+  p
+  
+  ggsave(
+    str_glue(
+      "{figurePath}Nhood_abundance_Milo_B_cell_From_PBMC_compareDisease_{cel}.png"
+    ),
+    width = 15,
+    height = 5,
+    bg = 'transparent'
+  )
+  
+  plot(p)
+  
+}
+
+#"#1f77b4" "#aec7e8" "#ff7f0e" "#ffbb78" "#2ca02c" "#98df8a" "#d62728" "#ff9896" "#9467bd" "#c5b0d5" "#8c564b" "#c49c94" "#e377c2" "#f7b6d2" "#7f7f7f" "#c7c7c7" "#bcbd22" "#dbdb8d" "#17becf" "#9edae5"
+
+```
+
+```{r}
+
+table(my_obs$disease_short)
+
+```
+
+##### Disease similarity based on cell abundance (Cell per 1000)
+
+###### mean_cell_per_1000
+
+```{r fig.height=7}
+
+mean_cell_per_1000 = my_obs_0_2 %>% group_by(disease_short, Cell_type_scANVI) %>% summarise(mean_cell = mean(Cell_per_1000)) %>%
+    pivot_wider(names_from = disease_short, values_from = mean_cell) %>%
+    tibble::column_to_rownames(var = "Cell_type_scANVI") %>% as.matrix()
+
+grid_width = 10
+dado_mean_cell_per_1000 = scale(t(mean_cell_per_1000))
+
+
+heat_m = Heatmap(
+      dado_mean_cell_per_1000,
+      cluster_rows = T,
+      name = "z-score",
+      #col = col_fun,
+      cluster_columns = T,
+      show_row_dend = T,
+      rect_gp = gpar(col = "white"),
+      show_column_names = TRUE,
+      show_row_names = TRUE,
+      width = ncol(dado_mean_cell_per_1000) * unit(grid_width, "mm"),
+      row_names_gp = gpar(fontsize = 10),
+      row_names_side = "right",
+      #column_dend_height = unit(10, "mm"),
+      heatmap_legend_param = list(
+        title_gp = gpar(fontsize = 15, fontface = "bold"),
+        labels_gp = gpar(fontsize = 15),
+        legend_height = unit(5, "cm"),
+        legend_width = unit(1, "cm"),
+        grid_width = unit(5, "mm"),
+        title_gap = unit(3, "mm")
+      ),
+      height = nrow(dado_mean_cell_per_1000) * unit(grid_width, "mm")
+    )
+
+heat_m = ggplotify::as.ggplot(heat_m)
+  
+plot(heat_m)
+
+
+```
+
+###### percentage
+
+```{r fig.height=7}
+mean_cell_per_1000 = my_obs_0_2 %>% select(donor_id, disease_short, Cell_type_scANVI, Cell_per_1000) %>% 
+  group_by(Cell_type_scANVI) %>% 
+  mutate(Total_Cell_per_1000 = sum(Cell_per_1000)) %>% 
+  select(disease_short, Cell_type_scANVI, Cell_per_1000, Total_Cell_per_1000) %>% unique() %>% 
+  group_by(disease_short, Cell_type_scANVI) %>%
+  summarise(percent_Cell_per_1000=100*Cell_per_1000/Total_Cell_per_1000, mean_percent_Cell_per_1000=median(percent_Cell_per_1000)) %>% 
+  select(disease_short, Cell_type_scANVI, mean_percent_Cell_per_1000) %>% unique() %>%
+    pivot_wider(names_from = disease_short, values_from = mean_percent_Cell_per_1000) %>%
+    tibble::column_to_rownames(var = "Cell_type_scANVI") %>% as.matrix()
+
+grid_width = 10
+
+
+dado_mean_cell_per_1000 = t(mean_cell_per_1000)
+
+heat_m = Heatmap(
+      dado_mean_cell_per_1000,
+      cluster_rows = T,
+      name = "Meancell/per 1000",
+      #col = col_fun,
+      cluster_columns = TRUE,
+      show_row_dend = T,
+      rect_gp = gpar(col = "white"),
+      show_column_names = TRUE,
+      show_row_names = TRUE,
+      row_names_side = "left",
+      width = ncol(dado_mean_cell_per_1000) * unit(grid_width, "mm"),
+      row_names_gp = gpar(fontsize = 10),
+      #column_dend_height = unit(10, "mm"),
+      heatmap_legend_param = list(
+        title_gp = gpar(fontsize = 15, fontface = "bold"),
+        labels_gp = gpar(fontsize = 15),
+        legend_height = unit(5, "cm"),
+        legend_width = unit(1, "cm"),
+        grid_width = unit(5, "mm"),
+        title_gap = unit(3, "mm")
+      ),
+      height = nrow(dado_mean_cell_per_1000) * unit(grid_width, "mm")
+    )
+
+heat_m = ggplotify::as.ggplot(heat_m)
+  
+plot(heat_m)
+
+
+```
+
+### Disease gene program
+
+```{r}
+colnames(colData(test_adata_))
+
+test_adata_$Cell_type_scANVI %>% unique()
+
+test_adata_$disease_short %>% unique()
+```
+
+```{r}
+
+levels(test_adata_$Cell_type_scANVI)
+```
+
+```{r}
+test_adata_$nhoo = case_when(test_adata_$nhoo_test_condition=="Enriched" ~ "Enriched",
+                                            TRUE ~ "Rest") %>% as.factor()
+
+table(test_adata_$disease_short, test_adata_$dataset_id)
+
+
+test_adata_$disease_nhoo = paste0(test_adata_$disease_short, "_", test_adata_$nhoo_test_condition) %>% as.factor()
+
+table(test_adata_$disease_nhoo, test_adata_$Cell_type_scANVI)
+
+```
+
+```{r}
+test_adata_$dataset_id %>% unique()
+```
+
+```{r}
+test_adata_$disease_short = str_remove(test_adata_$disease_short, "all_")
+test_adata_$disease_short = str_replace(test_adata_$disease_short, "hashimoto", "Hashimoto thyroiditis")
+test_adata_$disease_short = str_replace(test_adata_$disease_short, "psoriatic_arthritis", "Psoriatic arthritis")
+test_adata_$disease_short = str_replace(test_adata_$disease_short, "sjo_syndr", "Sjögren's syndrome")
+test_adata_$disease_short = str_replace(test_adata_$disease_short, "spondoarthritis", "Spondoarthritis")
+test_adata_$disease_short = str_replace(test_adata_$disease_short, "Oligo_JIA", "Oligoarticular JIA")
+
+test_adata_$disease_short = str_replace(test_adata_$disease_short, "CD", "IBD") %>% as.factor()
+
+test_adata_$Cell_type_scANVI = str_replace(test_adata_$Cell_type_scANVI, "Tem/Temra_cytotoxic_T_cells", "Tem/Temra_cytotoxic")
+
+test_adata_$Cell_type_scANVI = str_replace(test_adata_$Cell_type_scANVI, "Tcm/Naive_cytotoxic_1", "Tcm/Naive_cytotoxic")
+
+test_adata_$Cell_type_scANVI = str_replace(test_adata_$Cell_type_scANVI, "Tcm/Naive_cytotoxic_2", "Tcm/Naive_cytotoxic") %>% as.factor()
+```
+
+```{r}
+table(test_adata_$disease_short, test_adata_$Cell_type_scANVI)
+```
+
+##### ALL disease
+
+```{r}
+table(test_adata_$dataset_id, test_adata_$disease_short)
+```
+
+```{r}
+
+disease = "IBD"
+cel = "CD16__NK_CD56_plus"
+
+for (dataset in c("GSE157278_Hong_2020",
+                  "GSE163314_Lefferts_2021",
+                  "Perez_2022")) {
+  for (cel in levels(test_adata_[, test_adata_$dataset_id == dataset]$Cell_type_scANVI)) {
+    for (disease in levels(test_adata_$disease_short)[!(levels(test_adata_$disease_short) %in% c("Healthy", "asthma"))]) {
+      print(str_glue("Processing {cel} for {disease} vs Healthy ...."))
+      
+      n_samp = length(unique(test_adata_$donor_id[test_adata_$disease_short == disease &
+                                                    test_adata_$Cell_type_scANVI == cel]))
+      
+      #n_samp = length(unique(test_adata_$dataset_id[test_adata_$disease_short %in% c(disease, "Healthy") & test_adata_$Cell_type_scANVI == cel]))
+      
+      if (n_samp < 3 | disease == "Hashimoto thyroiditis") {
+        next
+      } else {
+        deg = run_deg(
+          test_adata = test_adata_,
+          lfc = 1,
+          p.val = 0.1,
+          cel_type = cel,
+          test_col = "disease_short",
+          ctrl = "Healthy",
+          var_column = "disease_short",
+          var.included = c("Healthy", disease),
+          covariable.dataset = F,
+          covar = "donor_id",
+          auc = T
+        )
+        
+        assign(x = str_glue("DEG_in_{cel}_{disease}_vs_Healthy"),
+               value = deg)
+      }
+      
+      
+    }
+  }
+}
+
+
+
+```
+
+```{r}
+unique(test_adata_$Cell_type_scANVI)
+```
+
+## Shared DE
+
+### Tem/Temra_cytotoxic
+
+```{r}
+`DEG_in_Tem_Temra_cytotoxic_Psoriatic_arthritis_vs_Healthy` = `DEG_in_Tem/Temra_cytotoxic_Psoriatic arthritis_vs_Healthy`
+`DEG_in_Tem_Temra_cytotoxic_Sjögren_syndrome_vs_Healthy` = `DEG_in_Tem/Temra_cytotoxic_Sjögren's syndrome_vs_Healthy`
+DEG_in_Tem_Temra_cytotoxic_SLE_vs_Healthy = `DEG_in_Tem/Temra_cytotoxic_SLE_vs_Healthy`
+`DEG_in_Tem_Temra_cytotoxic_IBD_vs_Healthy` = `DEG_in_Tem/Temra_cytotoxic_IBD_vs_Healthy`
+`DEG_in_Tem_Temra_cytotoxic_Oligoarticular_JIA_vs_Healthy` = `DEG_in_Tem/Temra_cytotoxic_Oligoarticular JIA_vs_Healthy`
+
+Shared_Tem_Temra_cytotoxic_up = data.frame(
+  name = Reduce(unique, list(DEG_in_Tem_Temra_cytotoxic_IBD_vs_Healthy$name[DEG_in_Tem_Temra_cytotoxic_IBD_vs_Healthy$dirFC == "Up"],
+  DEG_in_Tem_Temra_cytotoxic_Oligoarticular_JIA_vs_Healthy$name[DEG_in_Tem_Temra_cytotoxic_Oligoarticular_JIA_vs_Healthy$dirFC == "Up"],
+  DEG_in_Tem_Temra_cytotoxic_Psoriatic_arthritis_vs_Healthy$name[DEG_in_Tem_Temra_cytotoxic_Psoriatic_arthritis_vs_Healthy$dirFC == "Up"],
+  DEG_in_Tem_Temra_cytotoxic_Sjögren_syndrome_vs_Healthy$name[DEG_in_Tem_Temra_cytotoxic_Sjögren_syndrome_vs_Healthy$dirFC == "Up"],
+  DEG_in_Tem_Temra_cytotoxic_SLE_vs_Healthy$name[DEG_in_Tem_Temra_cytotoxic_SLE_vs_Healthy$dirFC == "Up"])
+  )
+)
+
+
+Shared_Tem_Temra_cytotoxic_up = rbind(
+  data.frame(inner_join(Shared_Tem_Temra_cytotoxic_up, DEG_in_Tem_Temra_cytotoxic_IBD_vs_Healthy[,c(1,3,7)]), Tissue = "Blood_IBD"),
+  data.frame(inner_join(Shared_Tem_Temra_cytotoxic_up, DEG_in_Tem_Temra_cytotoxic_Oligoarticular_JIA_vs_Healthy[,c(1,3,7)]), Tissue = "Blood_Oligoarticular_JIA"),
+  data.frame(inner_join(Shared_Tem_Temra_cytotoxic_up, DEG_in_Tem_Temra_cytotoxic_Psoriatic_arthritis_vs_Healthy[,c(1,3,7)]), Tissue = "Blood_Psoriatic_arthritis"),
+  data.frame(inner_join(Shared_Tem_Temra_cytotoxic_up, DEG_in_Tem_Temra_cytotoxic_Sjögren_syndrome_vs_Healthy[,c(1,3,7)]), Tissue = "Blood_Sjögren_syndrome"),
+  data.frame(inner_join(Shared_Tem_Temra_cytotoxic_up, DEG_in_Tem_Temra_cytotoxic_SLE_vs_Healthy[,c(1,3,7)]), Tissue = "Blood_SLE")
+  )
+
+# Select only deg up-regulated
+
+Shared_Tem_Temra_cytotoxic_up = Shared_Tem_Temra_cytotoxic_up[Shared_Tem_Temra_cytotoxic_up$lfc > 0, ]
+
+
+degPathShared =  "G:/My Drive/Projects/SCVI_Results/DEG/Enriched/Shared/"
+
+write.csv(unique(data.frame(Shared_Tem_Temra_cytotoxic_up, celltype="Tem_Temra_cytotoxic")[,c(1,5)]),
+          str_glue("{degPathShared}Results_DE_shared_Tem_Temra_cytotoxic.csv"))
+
+```
+
+### NKT
+
+```{r}
+
+Shared_NKT_up = data.frame(
+  name = Reduce(unique, list(DEG_in_NKT_IBD_vs_Healthy$name[DEG_in_NKT_IBD_vs_Healthy$dirFC == "Up"],
+  `DEG_in_NKT_Oligoarticular JIA_vs_Healthy`$name[`DEG_in_NKT_Oligoarticular JIA_vs_Healthy`$dirFC == "Up"],
+  `DEG_in_NKT_Psoriatic arthritis_vs_Healthy`$name[`DEG_in_NKT_Psoriatic arthritis_vs_Healthy`$dirFC == "Up"],
+  `DEG_in_NKT_Sjögren's syndrome_vs_Healthy`$name[`DEG_in_NKT_Sjögren's syndrome_vs_Healthy`$dirFC == "Up"],
+  DEG_in_NKT_SLE_vs_Healthy$name[DEG_in_NKT_SLE_vs_Healthy$dirFC == "Up"])
+  )
+)
+
+
+Shared_NKT_up = rbind(
+  data.frame(inner_join(Shared_NKT_up, DEG_in_NKT_IBD_vs_Healthy[,c(1,3,7)]), Tissue = "Blood_IBD"),
+  data.frame(inner_join(Shared_NKT_up, `DEG_in_NKT_Oligoarticular JIA_vs_Healthy`[,c(1,3,7)]), Tissue = "Blood_Oligoarticular_JIA"),
+  data.frame(inner_join(Shared_NKT_up, `DEG_in_NKT_Psoriatic arthritis_vs_Healthy`[,c(1,3,7)]), Tissue = "Blood_Psoriatic_arthritis"),
+  data.frame(inner_join(Shared_NKT_up, `DEG_in_NKT_Sjögren's syndrome_vs_Healthy`[,c(1,3,7)]), Tissue = "Blood_Sjögren_syndrome"),
+  data.frame(inner_join(Shared_NKT_up, DEG_in_NKT_SLE_vs_Healthy[,c(1,3,7)]), Tissue = "Blood_SLE")
+  )
+
+# Select only deg up-regulated
+
+Shared_NKT_up = Shared_NKT_up[Shared_NKT_up$lfc > 0, ]
+
+
+degPathShared =  "G:/My Drive/Projects/SCVI_Results/DEG/Enriched/Shared/"
+
+write.csv(unique(data.frame(Shared_NKT_up, celltype="NKT")[,c(1,5)]),
+          str_glue("{degPathShared}Results_DE_shared_NKT_up.csv"))
+
+```
+
+### γδ_T
+
+```{r}
+
+Shared_γδ_T_up = data.frame(
+  name = Reduce(unique, list(DEG_in_γδ_T_IBD_vs_Healthy$name[DEG_in_γδ_T_IBD_vs_Healthy$dirFC == "Up"],
+  `DEG_in_γδ_T_Oligoarticular JIA_vs_Healthy`$name[`DEG_in_γδ_T_Oligoarticular JIA_vs_Healthy`$dirFC == "Up"],
+  `DEG_in_γδ_T_Psoriatic arthritis_vs_Healthy`$name[`DEG_in_γδ_T_Psoriatic arthritis_vs_Healthy`$dirFC == "Up"],
+  `DEG_in_γδ_T_Sjögren's syndrome_vs_Healthy`$name[`DEG_in_γδ_T_Sjögren's syndrome_vs_Healthy`$dirFC == "Up"],
+  DEG_in_γδ_T_SLE_vs_Healthy$name[DEG_in_γδ_T_SLE_vs_Healthy$dirFC == "Up"])
+  )
+)
+
+
+Shared_γδ_T_up = rbind(
+  data.frame(inner_join(Shared_γδ_T_up, DEG_in_γδ_T_IBD_vs_Healthy[,c(1,3,7)]), Tissue = "Blood_IBD"),
+  data.frame(inner_join(Shared_γδ_T_up, `DEG_in_γδ_T_Oligoarticular JIA_vs_Healthy`[,c(1,3,7)]), Tissue = "Blood_Oligoarticular_JIA"),
+  data.frame(inner_join(Shared_γδ_T_up, `DEG_in_γδ_T_Psoriatic arthritis_vs_Healthy`[,c(1,3,7)]), Tissue = "Blood_Psoriatic_arthritis"),
+  data.frame(inner_join(Shared_γδ_T_up, `DEG_in_γδ_T_Sjögren's syndrome_vs_Healthy`[,c(1,3,7)]), Tissue = "Blood_Sjögren_syndrome"),
+  data.frame(inner_join(Shared_γδ_T_up, DEG_in_γδ_T_SLE_vs_Healthy[,c(1,3,7)]), Tissue = "Blood_SLE")
+  )
+
+# Select only deg up-regulated
+
+Shared_γδ_T_up = Shared_NKT_up[Shared_γδ_T_up$lfc > 0, ]
+
+
+degPathShared =  "G:/My Drive/Projects/SCVI_Results/DEG/Enriched/Shared/"
+
+write.csv(unique(data.frame(Shared_γδ_T_up, celltype="γδ_T")[,c(1,5)]),
+          str_glue("{degPathShared}Results_DE_shared_γδ_T_up.csv"))
+
+```
+
+### Save
+
+```{r}
+save.image(file = "G:/My Drive/Projects/SCVI_Results/Immune_compartment_PBMC/Subset_Agosto_2023/Milo/individual_disease_nhoo/PBMC_T_cells_session.RData")
+```
+
+```{r}
+load(file = "G:/My Drive/Projects/SCVI_Results/Immune_compartment_PBMC/Subset_Agosto_2023/Milo/individual_disease_nhoo/PBMC_T_cells_session.RData")
+```

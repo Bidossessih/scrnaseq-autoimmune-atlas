@@ -1,0 +1,654 @@
+---
+title: "Trajectory Macrophage"
+format: html
+editor: visual
+---
+
+```{r}
+
+rm(list = as.vector(lsf.str())) #remove functions from global env
+rm(list = ls())
+```
+
+```{r}
+suppressPackageStartupMessages({
+  library(slingshot, quietly = FALSE)
+  library(SingleCellExperiment)
+  library(SeuratObject)
+  library(Seurat)
+  library(scater)
+  library(dplyr)
+  library(stringr)
+})
+
+source("C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/scripts/autoimmuneSC/Integrated/R/helper_fun.R")
+
+```
+
+### Preprocessing
+
+```{r}
+#load("G:/My Drive/Projects/SCVI_Results/trajectory/Myeloid_seur_and_Tissue.RData")
+load("C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/sanger_gdrive/Projects/SCVI_Results/trajectory/Myeloid_PBMC_and_Tissue.RData")
+
+
+
+#myel_count <- counts(adata) %>% Matrix::as.matrix()
+
+
+#library(zellkonverter)
+#adata2 <- SCE2AnnData(adata, X_name = "counts")
+#writeH5AD(adata, "C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/sanger_gdrive/Projects/SCVI_Results/trajectory/Myeloid_PBMC_and_Tissue_converted_from_SCE.h5ad", X_name = "counts")
+#load("C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/scripts/autoimmuneSC/Integrated/Trajectory/Trajectory_analysis_Mono_Macrophage_2_2.RData")
+```
+
+```{r}
+#"Martin_JIA_2019", "Qian_Yue_Zhang_2022"
+adata = adata[, adata$dataset_id %in% c("Qian_Yue_Zhang_2022", "Martin_JIA_2019", "GSE134809_Martin_et_al_2019")]
+
+adata = adata[, !(adata$Cell_type_scANVI%in% c("DC1", "DC2", "Cycling", "Mast cell", "Mig DC", "pDC", "CCR7_CDE3", "Mac MERTK_hi_TREM2_low", "Mac MERTK_low_TREM2_hi", "Mo-Mac LYVE1+", "Non-cMon", 
+                                               "Mac1", "Mac2"))]
+
+adata = adata[, !((adata$dataset_id%in% c("GSE134809_Martin_et_al_2019", "Martin_JIA_2019") & adata$Cell_type_scANVI == "Mon_SIRPA"))]
+
+#adata = adata[, !adata$disease%in%c("Healthy", "Uninflam_CD")]
+```
+
+```{r}
+adata$dataset_id = droplevels(adata$dataset_id)
+adata$Cell_type_scANVI = droplevels(adata$Cell_type_scANVI)
+
+table(adata$Cell_type_scANVI, adata$dataset_id)
+```
+
+```{r}
+
+adata$Cell_type_scANVI = droplevels(adata$Cell_type_scANVI)
+adata$disease = droplevels(adata$disease)
+table(adata$disease, adata$Cell_type_scANVI)
+  
+table(adata$Cell_type_scANVI)
+```
+
+## Convert to seurat
+
+```{r}
+#sce <- adata[,adata$dataset_id=="GSE134809_Martin_et_al_2019"]
+```
+
+```{r}
+#dim(sce)
+```
+
+```{r}
+expression_matrix = assay(adata)
+
+cell_metadata = as.data.frame(colData(adata))
+
+cell_metadata$donor_id = droplevels(cell_metadata$donor_id)
+
+cell_metadata$tissue_harmo = droplevels(cell_metadata$tissue_harmo)
+
+#cell_metadata = cell_metadata[!(cell_metadata$Cell_type_scANVI %in% c("DC1", "DC2", "Cycling", "Mast cell", "Mig DC", "pDC")),]
+
+cell_metadata$Cell_type_scANVI = ifelse(cell_metadata$Cell_type_scANVI%in%c("Mo-Mac", "Mo-Mac_CX3CR1"), "Mac CX3CR1+", as.character(cell_metadata$Cell_type_scANVI))
+
+cell_metadata$Cell_type_scANVI = str_replace(cell_metadata$Cell_type_scANVI, "Mo-Mac", "Mac")
+
+cell_metadata$Cell_type_scANVI = as.factor(cell_metadata$Cell_type_scANVI)
+
+cell_metadata = cell_metadata %>% mutate(donor_disease= paste0(cell_metadata$donor_id, "_", cell_metadata$disease),
+                                         donor_tissue= paste0(cell_metadata$donor_id, "_", cell_metadata$tissue),
+                                         dataset_tissue_disease= paste0(cell_metadata$dataset_id, "_", cell_metadata$tissue,
+                                                                        "_", cell_metadata$disease))
+
+cell_metadata$donor_disease = factor(cell_metadata$donor_disease)
+cell_metadata$donor_tissue = factor(cell_metadata$donor_tissue)
+cell_metadata$dataset_tissue_disease = factor(cell_metadata$dataset_tissue_disease)
+gene_metadata = as.data.frame(rowData(adata))
+
+gene_metadata$gene_short_name = rownames(gene_metadata)
+```
+
+```{r}
+seur <- CreateSeuratObject(counts = expression_matrix, meta.data = cell_metadata)
+
+# store mitochondrial percentage in object meta data
+seur <- PercentageFeatureSet(seur, pattern = "^MT-", col.name = "percent.mt")
+
+#seur <- NormalizeData(seur)
+
+#seur <- FindVariableFeatures(seur, selection.method = "vst", nfeatures = 2000)
+
+#all.genes <- rownames(seur)
+#seur <- ScaleData(seur, features = all.genes)
+# run sctransform
+seur <- SCTransform(seur, verbose = TRUE, variable.features.n = 2000, return.only.var.genes = FALSE)
+
+```
+
+## standard steps in the Seurat workflow
+
+```{r}
+all.gene <- rownames(seur)
+seur <- RunPCA(seur, verbose = FALSE, features = VariableFeatures(seur))
+ElbowPlot(seur)
+
+```
+
+```{r}
+seur <- RunUMAP(seur, dims = 1:10, verbose = FALSE)
+seur <- FindNeighbors(seur, dims = 1:10, k.param = 40, verbose = FALSE)
+seur <- FindClusters(seur, verbose = FALSE, resolution = 0.5)
+DimPlot(seur, label = TRUE)
+DimPlot(seur, label = TRUE, group.by = "Cell_type_scANVI")
+DimPlot(seur, reduction = "pca")
+```
+
+### SlingShot
+
+```{r}
+sce <- as.SingleCellExperiment(seur)
+
+sce
+```
+
+```{r}
+#sce <- adata[,adata$dataset_id=="GSE134809_Martin_et_al_2019"]
+```
+
+```{r}
+# FQnorm <- function(counts) {
+#   rk <- apply(counts, 2, rank, ties.method = 'min')
+#   counts.sort <- apply(counts, 2, sort)
+#   refdist <- apply(counts.sort, 1, median)
+#   norm <- apply(rk, 2, function(r) {
+#     refdist[r]
+#   })
+#   rownames(norm) <- rownames(counts)
+#   return(norm)
+# }
+# assays(sce)$norm <- FQnorm(assays(sce)$counts)
+```
+
+```{r fig.height=10}
+#pca <- prcomp(t(log1p(assays(sce)$norm)), scale. = FALSE)
+#rd1 <- pca$x[,1:8]
+# reducedDims(sce)$PCA2 = rd1
+# plot(rd1, col = rgb(0,0,0,.5), pch=16, asp = 1)
+
+pca_data <- Embeddings(seur, reduction = "pca")
+umap_data <- Embeddings(seur, reduction = "umap")
+
+plot(pca_data, col = rgb(0,0,0,.5), pch=16, asp = 1)
+```
+
+```{r}
+library(uwot)
+```
+
+```{r fig.height=10}
+
+#rd2 <- reducedDims(cds)$UMAP
+
+plot(umap_data, col = rgb(0,0,0,.5), pch=16, asp = 1)
+```
+
+```{r}
+#library(mclust, quietly = TRUE)
+```
+
+```{r fig.height=10}
+#cl1 <- Mclust(pca_data)$classification
+
+cl1 <- colData(sce)$ident
+#colData(sce)$ident <- cl1
+
+library(RColorBrewer)
+plot(pca_data, col = brewer.pal(9,"Set1")[cl1], pch=16, asp = 1)
+```
+
+```{r fig.height=7}
+cl2 <- kmeans(pca_data, centers = 6)$cluster
+colData(sce)$kmeans <- cl2
+
+Cell_type_scANVI <- sce$Cell_type_scANVI
+
+plot(pca_data, col = brewer.pal(9,"Set1")[cl2], pch=16, asp = 1)
+
+plot(pca_data, col = brewer.pal(9,"Set1")[Cell_type_scANVI], pch=16, asp = 1) 
+
+legend("topright", legend = unique(Cell_type_scANVI), col = brewer.pal(9,"Set1")[Cell_type_scANVI], 
+       pch = 16, cex = 0.8, bty = "n")
+```
+
+```{r fig.width=12}
+# Define colors based on unique cell types
+clusters <- unique(cl2)
+num_clusters <- length(clusters)
+col_palette <- brewer.pal(min(num_clusters, 9), "Set1")  # Use at most 9 colors
+
+# Assign colors to each cell
+cluster_colors <- col_palette[as.numeric(as.factor(cl2))]
+
+# Plot
+plot(pca_data, col = cluster_colors, pch = 16, asp = 1)
+
+# Add legend
+legend("topright", legend = clusters, col = col_palette, pch = 16, cex = 0.8, bty = "n")
+```
+
+```{r}
+table(sce$Cell_type_scANVI, sce$kmeans)
+```
+
+```{r}
+# Global lineage structure and cluster-based minimum spanning tree
+sce <- slingshot(sce, clusterLabels = 'kmeans', reducedDim = 'PCA')
+```
+
+```{r}
+colData(sce)$slingshot
+```
+
+```{r}
+summary(sce$slingPseudotime_1)
+
+summary(sce$slingPseudotime_2)
+```
+
+```{r fig.height=10}
+library(grDevices)
+colors <- colorRampPalette(brewer.pal(11,'YlOrRd'))(100)
+plotcol <- colors[cut(sce$slingPseudotime_1, breaks=100)]
+
+plot(reducedDims(sce)$PCA, col = plotcol, pch=16, asp = 1)
+lines(SlingshotDataSet(sce), lwd=2, col='black')
+```
+
+```{r fig.height=7}
+library(RColorBrewer)
+cl2 <- kmeans(pca_data, centers = 6)$cluster
+colData(sce)$kmeans <- cl2
+
+Cell_type_scANVI <- gsub("", sce$Cell_type_scANVI)
+
+plot(pca_data, col = brewer.pal(9,"Set1")[cl2], pch=16, asp = 1)
+
+
+plot(pca_data, col = brewer.pal(9,"Set1")[Cell_type_scANVI], pch=16, asp = 1) 
+
+legend("topright", legend = unique(Cell_type_scANVI), col = brewer.pal(9,"Set1")[Cell_type_scANVI], 
+       pch = 16, cex = 0.8, bty = "n")
+```
+
+```{r}
+plot(reducedDims(sce)$PCA, col = plotcol, pch=16, asp = 1)
+lines(SlingshotDataSet(sce), lwd=2, col='black', type = "lineage")
+```
+
+```{r}
+meta_sling = data.frame(
+  cell = sce$Cell_type_scANVI,
+  dataset = sce$dataset_id,
+  ident = sce$ident,
+  kmeans = sce$kmeans,
+  sling1 = sce$slingPseudotime_1,
+  sling2 = sce$slingPseudotime_2,
+  ave_sling = slingshot::slingAvgPseudotime(sce)
+    )
+```
+
+```{r fig.height=2, fig.width=4}
+meta_sling[meta_sling$dataset == "GSE134809_Martin_et_al_2019",] %>% ggplot(aes(x=ave_sling, y = reorder(cell, ave_sling, median), fill = cell)) +
+  #scale_x_log10() +
+  geom_boxplot(show.legend = FALSE, outlier.size = 0.3) +
+  facet_wrap(~ dataset, scales = "free_x")
+```
+
+```{r fig.height=2, fig.width=4}
+meta_sling[meta_sling$dataset == "Martin_JIA_2019",] %>% ggplot(aes(x=ave_sling, y = reorder(cell, ave_sling, median), fill = cell)) +
+  #scale_x_log10() +
+  geom_boxplot(show.legend = FALSE, outlier.size = 0.3) +
+  facet_wrap(~ dataset, scales = "free_x")
+```
+
+```{r fig.height=2, fig.width=4}
+meta_sling[meta_sling$dataset == "Qian_Yue_Zhang_2022",] %>% ggplot(aes(x=ave_sling, y = reorder(cell, ave_sling, median), fill = cell)) +
+  #scale_x_log10() +
+  geom_boxplot(show.legend = FALSE, outlier.size = 0.3) +
+  facet_wrap(~ dataset, scales = "free_x")
+```
+####
+Figure 4A
+
+```{r fig.width=28, fig.height=5}
+unique(meta_sling$dataset)
+meta_sling <- meta_sling %>%
+  mutate(
+    disease = case_when(
+      dataset == "Qian_Yue_Zhang_2022" ~ "Hashimoto’s thyroiditis",
+      dataset == "GSE134809_Martin_et_al_2019" ~ "IBD",
+      dataset == "Martin_JIA_2019" ~ "Oligoarticular JIA",
+      TRUE ~ NA_character_
+    ),
+    cell = case_when(
+      cell == "Intermediate macrophage" ~ "IL1B high macrophage",
+      TRUE ~ cell
+    )
+  )
+
+meta_sling %>% ggplot(aes(x = reorder_within(x = cell, by = ave_sling, within = disease, fun = median), y = ave_sling, fill = cell)) +
+  geom_boxplot() + facet_wrap(~ disease, scales = "free", nrow = 1) + scale_x_reordered() +
+  coord_flip() + labs(x="Cell types", y = "Pseudotime", fill = "Cell types") + theme_bw() +
+  scale_fill_manual(values = color_cell_trajectory) +
+  theme(
+    axis.title = element_text(size = 25, face = "bold", colour = "black"),
+    axis.text = element_text(size = 25, colour = "black"),
+    legend.text = element_text(size = 25, colour = "black"),
+    legend.title = element_text(size = 25, colour = "black"),
+    strip.text = element_text(size = 25, colour = "black"),
+    legend.position = "none"
+  )
+
+ggsave(filename = "C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/scripts/autoimmuneSC/Integrated/Trajectory/scVI_2025/Trajectory_DE_slingshot_TradeSeq_results_for_paper_2025/result_plots/Pseudotime_boxplot.png", width = 28, height = 5)
+
+ggsave(filename = "C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/scripts/autoimmuneSC/Integrated/Trajectory/scVI_2025/Trajectory_DE_slingshot_TradeSeq_results_for_paper_2025/result_plots/Pseudotime_boxplot.svg", width = 28, height = 5)
+
+```
+
+```{r}
+embedded <- embedCurves(sce, "PCA")
+embedded1 <- slingCurves(embedded)[[1]] # only 1 path.
+embedded1 <- data.frame(embedded1$s[embedded1$ord,])
+
+embedded2 <- slingCurves(embedded)[[2]] # only 1 path.
+embedded2 <- data.frame(embedded2$s[embedded2$ord,])
+```
+
+```{r fig.width = 8, fig.height = 5}
+
+seur$Cell_type_scANVI = gsub("Intermediate macrophage", "IL1B high macrophage", seur$Cell_type_scANVI)
+
+
+DimPlot(seur, reduction = "pca", group.by = "Cell_type_scANVI") +
+  scale_color_manual(values = color_cell_trajectory) + labs(title = "") +
+  geom_path(
+    data = embedded1,
+    aes(x = PC_1, y = PC_2),
+    size = 0.8,
+    arrow = arrow(
+      length = unit(0.15, "cm"),
+      ends = "last",
+      type = "closed"
+    ),
+    color = "grey20"
+  ) +
+  geom_path(
+    data = embedded2,
+    aes(x = PC_1, y = PC_2),
+    size = 0.8,
+    arrow = arrow(
+      length = unit(0.15, "cm"),
+      ends = "last",
+      type = "closed"
+    ),
+    color = "grey20"
+  )
+
+ggsave(filename = "C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/scripts/autoimmuneSC/Integrated/Trajectory/scVI_2025/Trajectory_DE_slingshot_TradeSeq_results_for_paper_2025/result_plots/Dimplot_PCA.png", width = 8, height = 5)
+```
+
+```{r fig.height = 7}
+png("C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/scripts/autoimmuneSC/Integrated/Trajectory/scVI_2025/Trajectory_DE_slingshot_TradeSeq_results_for_paper_2025/result_plots/Dimplot_PCA_colored_by_pseudotime.png", height = 800, width = 1000)
+# Plot cells
+plot(reducedDims(sce)$PCA, col = plotcol, pch = 16, asp = 1)
+
+# Extract curve coordinates
+sds <- SlingshotDataSet(sce)
+
+# Add slingshot curves
+lines(sds, lwd = 2, col = 'black')
+
+# Add arrows to indicate direction
+for (curve in slingCurves(sds)) {
+  # Convert list of coordinates into a numeric matrix
+  crv <- as.data.frame(curve$s)
+  crv <- as.matrix(crv[, 1:2])  # take only first 2 PCA dimensions
+  
+  # Skip if curve is too short
+  if (nrow(crv) < 2) next
+  
+  # Add arrow near the end
+  arrows(
+    x0 = crv[nrow(crv) - 1, 1],
+    y0 = crv[nrow(crv) - 1, 2],
+    x1 = crv[nrow(crv), 1],
+    y1 = crv[nrow(crv), 2],
+    length = 0.1, angle = 20, col = "black", lwd = 2
+  )
+}
+
+dev.off()
+```
+
+```{r fig.width = 8, fig.height = 5}
+
+seur$Cell_type_scANVI = gsub("Intermediate macrophage", "IL1B high macrophage", seur$Cell_type_scANVI)
+seur$Cell_type0 = ifelse(
+  seur$Cell_type_scANVI %in% c("cMon_1", "cMon_2", "Mon_SIRPA"), "Monocytes",
+  seur$Cell_type_scANVI
+)
+
+color_cell0 = c(
+  Monocytes = "grey90",
+  "Mac CX3CR1+" =  "#7D54A5",
+  "IL1B high macrophage" = "#A6CEE3",
+  "Mac S100A8 prod" = "#8c554a"
+) 
+
+DimPlot(seur, reduction = "pca", group.by = "Cell_type0", pt.size = 1.2) + labs(title = "") +
+  scale_color_manual(values = color_cell0) +
+  geom_path(
+    data = embedded1,
+    aes(x = PC_1, y = PC_2),
+    size = 0.8,
+    arrow = arrow(
+      length = unit(0.15, "cm"),
+      ends = "last",
+      type = "closed"
+    ),
+    color = "grey20"
+  ) +
+  geom_path(
+    data = embedded2,
+    aes(x = PC_1, y = PC_2),
+    size = 0.8,
+    arrow = arrow(
+      length = unit(0.15, "cm"),
+      ends = "last",
+      type = "closed"
+    ),
+    color = "grey20"
+  )
+
+ggsave(filename = "C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/scripts/autoimmuneSC/Integrated/Trajectory/scVI_2025/Trajectory_DE_slingshot_TradeSeq_results_for_paper_2025/result_plots/Dimplot_PCA_Monocytes_vs_Macrophages.png", width = 8, height = 5)
+```
+
+```{r fig.height=6, fig.width=15}
+# bin pseudotime
+bins <- 100
+meta2 <- meta_sling %>%
+  mutate(bin = cut(ave_sling, breaks = seq(min(ave_sling), max(ave_sling), length.out = bins+1), include.lowest=TRUE)) %>%
+  group_by(bin, cell) %>%
+  summarise(n = n()) %>%
+  ungroup() %>%
+  group_by(bin) %>%
+  mutate(prop = n / sum(n),
+         bin_center = (as.numeric(sub("\\((.+),(.+)\\]","\\1", bin)) + as.numeric(sub("\\((.+),(.+)\\]","\\2", bin)))/2 ) # simpler: compute center another way if needed
+
+# easier way to compute bin centers:
+# convert bin to numeric factor and map to midpoints
+breaks <- seq(min(meta_sling$ave_sling), max(meta_sling$ave_sling), length.out = bins+1)
+midpoints <- (breaks[-1] + breaks[-length(breaks)])/2
+meta2$bin_center <- midpoints[as.integer(meta2$bin)]
+
+# ggplot(meta2, aes(x = bin_center, y = prop, fill = cell)) +
+#   geom_area(position = "stack") +
+#   scale_fill_manual(values = color_cell_trajectory) +
+#   labs(x = "Pseudotime", y = "Proportion", title = "Cell-type composition along pseudotime") +
+#   theme_minimal()
+
+# Step plot
+# ggplot(meta2, aes(x = bin_center, y = prop, color = cell)) +
+#   geom_step(size = 1.1) +
+#   theme_classic() +
+#   scale_color_manual(values = color_cell_trajectory) +
+#   labs(
+#     x = "Pseudotime",
+#     y = "Proportion of cells",
+#     color = "Cell type",
+#     title = "Cell-type density along pseudotime (stair plot)"
+#   )
+
+# ggplot(meta2, aes(x = bin_center, y = prop, color = cell)) +
+#   geom_smooth(se = FALSE, span = 0.3, size = 1.1) +
+#   theme_classic() +
+#   scale_color_manual(values = color_cell_trajectory) +
+#   labs(x = "Pseudotime", y = "Proportion of cells", color = "Cell type",
+#        title = "Cell-type density along pseudotime (smoothed)")
+# 
+# 
+# library(ggridges)
+# ggplot(meta_sling, aes(x = ave_sling, y = cell, fill = cell)) +
+#   geom_density_ridges(alpha = 0.7, scale = 2) +
+#   scale_fill_manual(values = color_cell_trajectory) +
+#   theme_ridges() +
+#   labs(x = "Pseudotime", y = "Cell type", 
+#        title = "Cell-type distributions along pseudotime")
+
+
+meta2$cell = gsub("Intermediate macrophage", "IL1B high macrophage", meta2$cell)
+meta2$cell = factor(meta2$cell, levels = c("Mon_SIRPA", 
+                                           "cMon_2", "cMon_1", 
+                                           "Mac S100A8 prod",
+                                           "Mac CX3CR1+", "IL1B high macrophage"))
+ggplot(meta2, aes(x = bin_center, y = prop, color = cell, fill = cell)) +
+  geom_line(size = 1, show.legend = FALSE) +
+  geom_area(alpha = 0.3, show.legend = FALSE) +
+  facet_wrap(~cell, scales = "free_y", ncol = 1) +
+  scale_fill_manual(values = color_cell_trajectory) +
+  scale_color_manual(values = color_cell_trajectory) +
+  theme_minimal() +
+  labs(x = "Pseudotime", y = "Proportion",
+       title = "Cell-type proportions along pseudotime") +
+  theme(
+    
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+    axis.title.x = element_text(size = 16),
+    axis.title.y = element_text(size = 16),
+    strip.text = element_text(size = 12, face = "bold"),  # facet labels
+    axis.text = element_text(size = 10)
+  )
+
+ggsave(filename = "C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/scripts/autoimmuneSC/Integrated/Trajectory/scVI_2025/Trajectory_DE_slingshot_TradeSeq_results_for_paper_2025/result_plots/Proportion_along_pseudotime.png", width = 15, height = 6)
+```
+
+## Save
+
+```{r}
+#save.image("C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/scripts/autoimmuneSC/Integrated/Trajectory/Trajectory_analysis_Mono_Macrophage_SlingShot_2025.RData")
+```
+
+## Load
+
+```{r}
+#load("C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/scripts/autoimmuneSC/Integrated/Trajectory/Trajectory_analysis_Mono_Macrophage_SlingShot.RData")
+load("C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/scripts/autoimmuneSC/Integrated/Trajectory/Trajectory_analysis_Mono_Macrophage_SlingShot_2025.RData")
+```
+
+```{r}
+adata_scvi = zellkonverter::readH5AD("C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/scripts/autoimmuneSC/Integrated/Trajectory/scVI_2025/Myeloid_PBMC_and_Tissue_scvi.h5ad")
+```
+
+```{r}
+#"Martin_JIA_2019", "Qian_Yue_Zhang_2022"
+adata_scvi = adata_scvi[, adata_scvi$dataset_id %in% c("Qian_Yue_Zhang_2022", "Martin_JIA_2019", "GSE134809_Martin_et_al_2019")]
+
+adata_scvi = adata_scvi[, !(adata_scvi$Cell_type_scANVI%in% c("DC1", "DC2", "Cycling", "Mast cell", "Mig DC", "pDC", "CCR7_CDE3", "Mac MERTK_hi_TREM2_low", "Mac MERTK_low_TREM2_hi", "Mo-Mac LYVE1+", "Non-cMon", 
+                                               "Mac1", "Mac2"))]
+
+adata_scvi = adata_scvi[, !((adata_scvi$dataset_id%in% c("GSE134809_Martin_et_al_2019", "Martin_JIA_2019") & adata_scvi$Cell_type_scANVI == "Mon_SIRPA"))]
+
+expression_matrix = assay(adata_scvi, "scvi_normalized")
+```
+
+## Subsetting and plotting
+
+```{r}
+sce_subset <- sce[, colnames(sce) %in% colnames(expression_matrix)]
+
+all.equal(colnames(sce_subset), colnames(expression_matrix))
+```
+
+```{r fig.height=10}
+library(grDevices)
+colors <- colorRampPalette(brewer.pal(11,'YlOrRd'))(100)
+plotcol <- colors[cut(sce$slingPseudotime_1, breaks=100)]
+
+plot(reducedDims(sce)$PCA, col = plotcol, pch=16, asp = 1)
+lines(SlingshotDataSet(sce), lwd=2, col='black')
+```
+
+```{r}
+seur_subset <- seur[, colnames(seur) %in% colnames(expression_matrix)]
+
+all.equal(colnames(seur_subset), colnames(expression_matrix))
+```
+
+```{r}
+DimPlot(seur_subset, reduction = "pca") + 
+  geom_path(data=embedded1, aes(x=PC_1, y=PC_2), size=0.6) +
+  geom_path(data=embedded2, aes(x=PC_1, y=PC_2), size=0.6)
+```
+
+```{r}
+counts <- GetAssayData(seur, assay = "RNA")
+counts <- as.matrix(counts)
+
+save(seur, sce, counts, file = "C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/scripts/autoimmuneSC/Integrated/Trajectory/scVI_2025/Trajectory_DE_slingshot_TradeSeq/Slingshot_trajetory_Agosto_2025.RData")
+```
+
+```{r}
+library(tradeSeq)
+
+# fit negative binomial GAM
+sce <- fitGAM(sce, )
+
+# test for dynamic expression
+ATres <- associationTest(sce)
+```
+
+```{r}
+topgenes <- rownames(ATres[order(ATres$pvalue), ])[1:250]
+pst.ord <- order(sce$slingPseudotime_1, na.last = NA)
+heatdata <- assays(sce)$counts[topgenes, pst.ord]
+heatclus <- sce$GMM[pst.ord]
+
+heatmap(log1p(heatdata), Colv = NA,
+        ColSideColors = brewer.pal(9,"Set1")[heatclus])
+```
+
+```{r}
+sce$slingshot= slingAvgPseudotime(sce)
+U <- model.matrix(~ dataset_id + pseudotime, data = colData(sce))
+U_matrix <- metadata(sce)$tradeSeq
+dim(U_matrix)  # Check dimensions
+head(U_matrix) # Inspect first few values
+```
+
+```{r}
+pseudotime <- slingPseudotime(sce, na = FALSE)
+
+cellWeights = slingCurveWeights(sce_subset)
+```

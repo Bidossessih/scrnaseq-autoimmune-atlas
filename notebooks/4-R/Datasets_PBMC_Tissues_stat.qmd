@@ -1,0 +1,147 @@
+---
+title: "Datasets_PBMC_Tissues_stat"
+format: html
+editor: visual
+---
+
+```{r}
+pacman::p_load(
+  SingleCellExperiment,
+  ggprism,
+  tidyverse,
+  scales,
+  patchwork,
+  ComplexHeatmap,
+  circlize,
+  ggside
+)
+
+
+#### Windows
+source("./colors.R")
+
+# Source helper functions
+
+source("./helper_fun.R")
+
+
+```
+
+## Load Myeloid_B_T_From_PBMC
+
+```{r}
+
+figurePath = "C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/sanger_gdrive/Projects/SCVI_Results/Immune_compartment_PBMC/Subset_Agosto_2023/Figures/"
+
+umap1 <- read.csv("C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/sanger_gdrive/Projects/SCVI_Results/Milo_combine/Obs_Myeloid_B_T_From_PBMC_label_transfert_Subset_annotated_Milo_3K_with_UMAP.csv")
+
+
+unique(umap1$tissue)# Blood
+
+unique(umap1$dataset_id)
+
+# [1] "Qian_Yue_Zhang_2022"         "Perez_2022"                  "Martin_JIA_2019"            
+# [4] "E-MTAB-9492_Penkava_2020"    "GSE134809_Martin_et_al_2019" "GSE163314_Lefferts_2021"    
+# [7] "GSE157278_Hong_2020"         "Braga_asthma_CD4"  
+```
+
+```{r fig.fullwidth = TRUE, fig.width=9, fig.height=3}
+dataset_data <- umap1 %>% group_by(dataset_id) %>% 
+  summarise(
+    Cell_count = n()
+  )
+
+
+ggplot(dataset_data, aes(x=Cell_count, y=reorder(dataset_id, Cell_count))) + 
+    geom_bar(position="stack", stat="identity") + 
+    #geom_col(width = 0.4) +
+    labs(y = "", x = str_glue("Cell Number \n Total: {nrow(umap1)}"), title = "PBMC") +
+    #scale_y_continuous(expand = c(0,1)) +
+    #scale_fill_manual(values=c(color_disease_pbmc, color_cell_tissue)) +
+    scale_x_continuous(expand = expansion(mult = c(0, 0.04))) +
+    theme_bw() + #coord_flip() +
+    geom_text(aes(label = after_stat(x), group = dataset_id), 
+              stat = 'summary', fun = sum, 
+              nudge_x = max(dataset_data$Cell_count) * 0.045, hjust = 0.5) +
+    theme(#axis.text.x = element_text(hjust=1, vjust = 0.5, size = 15, angle = 90),
+          axis.text = element_text(size=12),
+          axis.title = element_text(size=12),
+         legend.key.size = unit(0.6, 'cm'),
+         legend.text = element_text(size=12),
+         legend.title = element_text(size=12),
+         axis.line = element_line(colour = "black", linewidth = 0.6),
+         legend.key.width = unit(0.4, "cm"),
+         legend.key.height = unit(0.4, "cm")) #+ scale_colour_brewer(palette = "Paired") 
+
+
+ggsave(str_glue("{figurePath}/Dataset_from_Myeloid_B_T_From_PBMC_label_transfert_Subset_annotated_Milo_3K.png"), width = 10, height = 3)
+
+```
+
+```{r}
+rm(umap0, dataset_data)
+```
+
+## Load Myeloid_B_T_From_Tissue
+
+```{r}
+
+figurePath = "C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/sanger_gdrive/Projects/SCVI_Results/All_Tissue_or_Nonimmune/Subset_Reintegrated_full/Figures/"
+
+library(readr)
+umap1 <- read_csv("C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/sanger_gdrive/Projects/SCVI_Results/Milo_combine/Obs_Myeloid_B_T_From_Tissue_label_transfert_Subset_annotated_Milo_3K_with_UMAP.csv")
+
+unique(umap1$dataset_id)
+
+umap2 <- read.csv("C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/sanger_gdrive/Projects/SCVI_Results/Milo_combine/Obs_Myeloid_B_T_From_Tissue_label_transfert_Subset_annotated_Milo_3K_with_UMAP_from_gpu_with_Skin_data.csv")
+
+unique(umap2$dataset_id)
+# "Qian_Yue_Zhang_2022"         "GSE121380_Huang_2019"        "E-MTAB-8322_Stefeno_2020"   
+#  [4] "GSE134809_Martin_et_al_2019" "Elmentaite_2020"             "GSE163314_Lefferts_2021"    
+#  [7] "Martin_JIA_2019"             "Kong_et_al_2023"             "GSE161500_Abji_2020"        
+# [10] "E-MTAB-9492_Penkava_2020"    "Skin_Reynolds_et_al"
+
+setdiff(unique(umap1$dataset_id), unique(umap2$dataset_id))
+setdiff(unique(umap2$dataset_id), unique(umap1$dataset_id))#Skin_Reynolds_et_al
+
+```
+
+```{r fig.fullwidth = TRUE, fig.width=10, fig.height=3}
+dataset_data2 <- umap2 %>% group_by(dataset_id) %>% 
+  summarise(
+    Cell_count = n()
+  )
+
+
+ggplot(dataset_data2, aes(x=Cell_count, y=reorder(dataset_id, Cell_count))) + 
+    geom_bar(position="stack", stat="identity") + 
+    #geom_col(width = 0.4) +
+    labs(y = "", x = str_glue("Cell Number \n Total: {nrow(umap2)}"), title = "Tissues") +
+    #scale_y_continuous(expand = c(0,1)) +
+    #scale_fill_manual(values=c(color_disease_pbmc, color_cell_tissue)) +
+    scale_x_continuous(expand = expansion(mult = c(0, 0.04))) +
+    theme_bw() + #coord_flip() +
+    geom_text(aes(label = after_stat(x), group = dataset_id), 
+              stat = 'summary', fun = sum, 
+              nudge_x = max(dataset_data2$Cell_count) * 0.045, hjust = 0.5) +
+    theme(#axis.text.x = element_text(hjust=1, vjust = 0.5, size = 15, angle = 90),
+          axis.text = element_text(size=12),
+          axis.title = element_text(size=12),
+         legend.key.size = unit(0.6, 'cm'),
+         legend.text = element_text(size=12),
+         legend.title = element_text(size=12),
+         axis.line = element_line(colour = "black", linewidth = 0.6),
+         legend.key.width = unit(0.4, "cm"),
+         legend.key.height = unit(0.4, "cm")) #+ scale_colour_brewer(palette = "Paired") 
+
+
+ggsave(str_glue("{figurePath}/Dataset_from_Tissue_label_transfert_Subset_annotated_Milo_3K_with_UMAP.png"), width = 12, height = 5)
+```
+
+```{r}
+unique(c(unique(umap1$dataset_id), unique(umap2$dataset_id)))
+```
+
+
+
+

@@ -1,0 +1,3222 @@
+---
+title: "Differential expression of Milo nhoods"
+author: "Bidossessi Hounkpe"
+date: "04/08/2023"
+format: html
+  df-print: kable
+editor: visual
+---
+
+```{r}
+rm(list = ls())
+```
+
+```{r}
+library(tidyverse)
+library(SingleCellExperiment)
+library(Matrix)
+library(scran)
+library(scuttle)
+library(glmGamPoi)
+library(edgeR)
+library(ggbeeswarm)
+library(ComplexHeatmap)
+library(reticulate)
+library(ggrepel)
+
+basepath <- "C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/scripts/scrnaseq-autoimmune-atlas/notebooks/4-R/"
+
+# DEG
+
+source(str_glue(basepath, "deg_fun.R"))
+
+#source("C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/scripts/autoimmuneSC/Integrated/R/colors.R")
+source(str_glue(basepath, "colors.R"))
+# Source helper functions
+#source("C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/scripts/autoimmuneSC/Integrated/R/helper_fun.R")
+source(str_glue(basepath, "helper_fun.R"))
+# Network expansion 
+#source("C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/scripts/autoimmuneSC/Integrated/R/openTarget.R")
+source(str_glue(basepath, "openTarget.R"))
+
+source(str_glue(basepath, "Milo_horizontal_plot.R"))
+# Network expansion 
+
+#source("C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/scripts/autoimmuneSC/Integrated/R/openTarget.R")
+figurePath = "C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/sanger_gdrive/Projects/SCVI_Results/Immune_compartment_PBMC/Subset_Agosto_2023/Figures/"
+
+
+degPathEnriched = "C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/sanger_gdrive/Projects/SCVI_Results/DEG/Enriched/"
+
+degPathDepleted = "C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/sanger_gdrive/Projects/SCVI_Results/DEG/Depleted/"
+```
+
+```{r}
+#Use conda env for reticulate
+reticulate::use_condaenv("ScGwas", required = TRUE)
+```
+
+```{python}
+import os,sys
+import numpy as np
+import pandas as pd
+#import drug2cell as d2c
+#import scanpy as sc
+#import sctk
+#import gc
+#sys.path.append("/mnt/c/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/scripts/autoimmuneSC/AIID_notebooks/")
+
+sys.path.append("C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/scripts/autoimmuneSC/AIID_notebooks/")
+
+#from inflapy.immunoFunc import *
+import gseapy as gp
+```
+
+```{python}
+print(sys.executable)
+"/Users/bidos/miniconda3/envs/ScGwas/pyt"
+#import blitzgsea as blitz
+import platform
+print(platform.python_version())
+import blitzgsea as blitz
+```
+
+```{python}
+
+# read signature as pandas dataframe
+signature = pd.read_csv("https://github.com/MaayanLab/blitzgsea/raw/main/testing/ageing_muscle_gtex.tsv")
+
+# list available gene set libraries in Enrichr
+blitz.enrichr.print_libraries()
+
+# use enrichr submodule to retrieve gene set library
+library = blitz.enrichr.get_library("KEGG_2021_Human")
+
+# run enrichment analysis
+result = blitz.gsea(signature, library)
+
+```
+
+```{r}
+reticulate::py_install("blitzgsea")
+```
+
+# Umap Myeloid from tissue
+
+```{r}
+obs = read.csv("G:/My Drive/Projects/SCVI_Results/Immune_compartment_PBMC/Subset_Agosto_2023/Milo/Myeloid_From_PBMC_label_transfer_Milo_3K.csv")
+
+umap = read.csv("C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/sanger_gdrive/Projects/SCVI_Results/Immune_compartment_PBMC/Subset_Agosto_2023/Milo/Myeloid_From_PBMC_label_transfer_Milo_3K_UMAP.csv")
+```
+
+```{r}
+unique(umap$Cell_type_scANVI)
+```
+### Figure 3A
+
+```{r fig.width= 10, fig.height=7}
+
+
+umap = umap[umap$Cell_type_scANVI != "CCR7_CDE3",]
+
+umap$Cell_type_scANVI = case_when(
+  umap$Cell_type_scANVI == "cMon_1" ~ "Activated cMon",
+  umap$Cell_type_scANVI == "cMon_2" ~ "cMon",
+  TRUE ~ umap$Cell_type_scANVI
+)
+
+umap %>% filter(Cell_type_scANVI != "Unknown") %>% 
+  ggplot(aes(x=umap_1, y=umap_2, color = Cell_type_scANVI)) +
+  geom_point() +
+  theme_bw() +
+  scale_colour_manual(values = color_cell_pbmc)
+  
+```
+
+```{r fig.width= 5, fig.height=4}
+plot_umap(
+  umap_data = umap,
+  cluster = "Cell_type_scANVI",
+  umap_1 = "umap_1",
+  umap_2 = "umap_2",
+  selected_clusters = c(
+    "Activated cMon",
+    "cMon",
+    "Non-cMon"
+  ),
+  shape.size = 0.5,
+  cluster_palette = color_cell_pbmc,
+  arrow.length = 3,
+  repel_text_size = 3
+)
+
+
+
+ggsave(
+  str_glue(
+    "{figurePath}Umap_Milo_myel_From_PBMC_Only_cMon_Non_cMon.svg"
+  ),
+  width = 5,
+  height = 5,
+  bg = 'transparent'
+)
+
+
+ggsave(
+  str_glue(
+    "{figurePath}Umap_Milo_myel_From_PBMC_Only_cMon_Non_cMon.png"
+  ),
+  width = 5,
+  height = 4,
+  bg = 'transparent'
+)
+  
+```
+
+
+### Figure 3C: Milo plot
+
+```{r fig.fullwidth = TRUE, fig.width=20, fig.height=10.5}
+
+h5ad_path = 'C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/sanger_gdrive/Projects/SCVI_Results/Immune_compartment_PBMC/Subset_Agosto_2023/Milo/'
+
+compare_disease_df = read.csv(str_glue("{h5ad_path}Myeloid_From_PBMC_label_transfer_Milo_3K.csv"))
+
+#compare_disease_df = compare_disease_df[!compare_disease_df$disease %in% c("all_CD_and_spondoarthritis", "all_spondoarthritis"), ]
+
+unique(compare_disease_df$disease)
+compare_disease_df$Sig = ifelse(compare_disease_df$Sig == "True", TRUE, FALSE)
+
+print(table(compare_disease_df$disease))
+
+#### Prepare data
+
+
+nhoo_prep = milo_prep_data(nhood_res=compare_disease_df, condition = "disease", Sig = "Sig", thres = 0.1,
+                     dis_pref = "all_", index_cell = "index_cell", order_by_kth = FALSE,
+                     nhood_annotation="nhood_annotation", n_shared=0,
+                     SpatialFDR = "SpatialFDR", logFC = "logFC")
+
+
+nhoo_prep$condition = str_replace(nhoo_prep$condition, "CD", "IBD") %>% as.factor()
+
+nhoo_prep$condition = str_replace(nhoo_prep$condition, "hashimoto", "Hashimoto's thyroiditis")
+
+nhoo_prep$condition = str_replace(nhoo_prep$condition, "spondoarthritis", "Spondlyoarthritis")
+
+nhoo_prep$condition = str_replace(nhoo_prep$condition, "sjo_syndr", "Sjögren's syndrome")
+
+nhoo_prep$nhood_annotation = case_when(
+  nhoo_prep$nhood_annotation == "cMon_1" ~ "Activated cMon",
+  nhoo_prep$nhood_annotation == "cMon_2" ~ "cMon",
+  TRUE ~ nhoo_prep$nhood_annotation
+)
+
+milo_plot_horizontal(
+  nhoo_prep = nhoo_prep[nhoo_prep$nhood_annotation != "CCR7_CDE3", ],
+  rel_widths = c(0.15, 1, 0.25),
+  anot_bar_height = 0.05,
+  col.pal = color_cell_pbmc,
+  label_size = 30,
+  annot_size = 15,
+  annot_col = "black",
+  annot.bar.height = 0.5,
+  expand_y_sc = 0.1,
+  #dendro.width = 3,
+  legend.key.size = unit(1.5, "cm"),
+  legend.text = element_text(size = 40),
+  legend.title = element_text(size = 40, face = "bold"),
+  legend.position = "bottom",
+  legend.box.spacing = unit(5, 'cm'),
+  legend.spacing =5,
+  fc_legend.size =5,
+  fc_annot_size = 40,
+  legend.margin.custom = -180,
+  dendro.width = 2, bar.title = "Blood",
+  y.axis.label = "Comparative neighbourhood \nabundance",
+  y.axis.label.size = 35
+  
+) +
+  guides(fill = guide_legend(title.position="top", title.hjust = 0.5, ncol = 2))
+
+#milo_hori_plot
+
+
+```
+
+```{r}
+ggsave(str_glue("{figurePath}Milo_myel_From_PBMC_compareDisease_with_specific_spondyloarthtitis_2026.png"), width = 20, height = 10.5, bg='transparent')
+ggsave(str_glue("{figurePath}Milo_myel_From_PBMC_compareDisease_with_specific_spondyloarthtitis_2026.svg"), width = 20, height = 10.5, bg='transparent')
+```
+
+```{r}
+# ggsave(str_glue("{figurePath}Milo_myel_From_PBMC_compareDisease_with_specific_healthy.png"), width = 20, height = 8, bg='transparent')
+# ggsave(str_glue("{figurePath}Milo_myel_From_PBMC_compareDisease_with_specific_healthy.svg"), width = 20, height = 8, bg='transparent')
+```
+
+
+### Data loading and preparation
+
+```{r}
+#sce_path = "/nfs/team205/bh14/Datasets/Remapped/raw_adata/SCVI_Results/All_PBMC_or_Nonimmune/Subset_Reintegrated_full/Milo/enriched_depleted_SCE/"
+
+sce_path = "C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/sanger_gdrive/Projects/SCVI_Results/Immune_compartment_PBMC/Subset_Agosto_2023/Milo/individual_disease_nhoo/"
+
+# 
+
+load(str_glue("{sce_path}Pseudo_test_adata_Myeloid_PBMC.RData"))
+
+test_adata_$Cell_type_scANVI = as.character(test_adata_$Cell_type_scANVI)
+
+test_adata_ = test_adata_[, test_adata_$Cell_type_scANVI != "CCR7_CDE3"]
+
+test_adata_$Cell_type_scANVI = gsub(" ", "_", test_adata_$Cell_type_scANVI) %>% factor()
+
+test_adata_$Cell_type_scANVI = gsub("Mon_SIRPA", "cMon_SIRPA", test_adata_$Cell_type_scANVI) %>% factor()
+
+test_adata_$donor_id = factor(gsub(" ", "_", test_adata_$donor_id))
+
+test_adata_$donor_id = factor(gsub("-", "_", test_adata_$donor_id))
+
+test_adata_$disease_short = droplevels(test_adata_$disease_short)
+
+unique(test_adata_$Cell_type_scANVI)
+```
+
+```{r}
+table(test_adata_$disease_short, test_adata_$Cell_type_scANVI)
+```
+
+```{r}
+table(test_adata_$nhoo_test_condition, test_adata_$Cell_type_scANVI)
+```
+## End
+```{r}
+my_obs = read.csv("C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/sanger_gdrive/Projects/SCVI_Results/Immune_compartment_PBMC/Subset_Agosto_2023/Milo/individual_disease_nhoo/PBMC_Myeloid_individual_disease_Milo_adata_reajusted.csv")
+
+table(my_obs$Cell_type_scANVI)
+
+
+
+```
+
+```{r}
+my_obs$disease_short = str_remove(my_obs$disease_short, "all_")
+```
+
+```{r}
+my_obs$disease_dataset=paste0(my_obs$disease_short, "_", my_obs$dataset_id)
+```
+
+```{r}
+table(my_obs$disease_dataset, my_obs$Cell_type_scANVI)
+```
+
+#### Abundance Plot
+
+```{r}
+levels(test_adata_$Cell_type_scANVI)
+```
+
+```{r}
+table(my_obs$dataset_id, my_obs$disease_short)
+```
+
+```{r}
+my_obs$disease_short = str_replace(my_obs$disease_short, "CD", "IBD") %>% as.factor()
+my_obs$disease_short = str_replace(my_obs$disease_short, "hashimoto", "Hashimoto's thyroiditis")
+
+my_obs$disease_short = str_replace(my_obs$disease_short, "spondoarthritis", "Spondyloarthritis")
+
+my_obs$disease_short = str_replace(my_obs$disease_short, "sjo_syndr", "Sjögren's syndrome")
+unique(my_obs$disease_short)
+```
+
+```{r}
+my_obs$Cell_type_scANVI = case_when(
+  my_obs$Cell_type_scANVI == "cMon_1" ~ "Activated cMon",
+  my_obs$Cell_type_scANVI == "cMon_2" ~ "cMon",
+  TRUE ~ my_obs$Cell_type_scANVI
+)
+
+
+```
+
+```{r fig.width=8}
+my_obs[my_obs$dataset_id %in% c("GSE157278_Hong_2020", "GSE163314_Lefferts_2021", "Perez_2022") & 
+         my_obs$Cell_type_scANVI != "CCR7_CDE3",] %>% 
+dplyr::select(dataset_id, disease_short, Cell_type_scANVI) %>% mutate(dataset_id = str_remove(dataset_id, "GSE[0-9]*_{1}")) %>% 
+  group_by(dataset_id, Cell_type_scANVI, disease_short) %>% mutate(count = n()) %>% unique() %>%
+  ggplot(aes(fill=Cell_type_scANVI, y=count, x= reorder(disease_short, count))) + 
+  geom_bar(position="stack", stat="identity", color = "white") + 
+  labs(x = "", y = "Composition", fill = "Cellular compartment") +
+  facet_wrap(~ dataset_id, scales = "free", ncol = 4) +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.05))) +
+  theme_bw() + #coord_flip() +
+  scale_fill_manual(values = color_cell_pbmc) +
+  scale_x_reordered() +
+  theme(
+    axis.text.x = element_text(
+      hjust = 1,
+      vjust = 0.5,
+      size = 12,
+      angle = 90
+    ),
+    axis.text = element_text(size = 18, color = "black"),
+    legend.key.size = unit(0.8, 'cm'),
+    legend.text = element_text(size = 18),
+    #axis.line = element_line(colour = "black", linewidth = 0.6),
+    legend.key.width = unit(0.8, "cm"),
+    axis.ticks.x = element_blank(),
+    panel.grid = element_blank(),
+    legend.key.height = unit(0.8, "cm"),
+    plot.title = element_text(size = 18),
+    axis.title = element_text(size = 18),
+    legend.title = element_text(size = 18)
+  )
+
+
+ggsave(str_glue("{figurePath}/Myeloid_cell_abundance_Disease_PBMC_across_studies_with_healthy.svg"), width = 8, bg='transparent')
+
+ggsave(str_glue("{figurePath}/Myeloid_cell_abundance_Disease_PBMC_across_studies_with_healthy.png"), width = 8, bg='transparent')
+
+```
+
+```{r fig.fullwidth = TRUE, fig.width=9, fig.height=9}
+my_obs_0_2 = my_obs[my_obs$dataset_id == "Perez_2022" & my_obs$Cell_type_scANVI != "CCR7_CDE3",]
+
+
+my_obs_0_2$disease_short = as.factor(my_obs_0_2$disease_short)
+
+my_obs_0_2$donor_nhoo = paste0(my_obs_0_2$donor_id, "_", my_obs_0_2$nhoo_test_condition)
+
+my_obs_0_2 = my_obs_0_2 %>% dplyr::select(donor_id, donor_nhoo, disease_short, Cell_type_scANVI, nhoo_test_condition) %>% 
+  # Number of cells per donor in each cell type
+  group_by(donor_nhoo, Cell_type_scANVI, disease_short) %>% mutate(total_per_donor_per_celltype = n()) %>% unique() %>%  
+  # total number of cells per donor
+  group_by(donor_id) %>% mutate(Cell_count_per_donor=sum(total_per_donor_per_celltype)) %>% unique() %>% ungroup() %>% 
+  # Cells per 1000
+  mutate(Cell_per_1000=total_per_donor_per_celltype*1000/Cell_count_per_donor) %>% unique() %>% 
+  group_by(donor_id) %>% mutate(dsum = sum(Cell_per_1000)) %>% 
+  # number of cell per nhood per disease
+  group_by(disease_short, Cell_type_scANVI, nhoo_test_condition) %>% mutate(norm_Cell_count_per_nhood_disease=sum(Cell_per_1000))
+
+#some donors have only one cell type (Cell_per_1000==1000)
+
+my_obs_0_3 = unique(my_obs_0_2[,c(3:5,10)])
+
+ggplot(my_obs_0_3, aes(fill=nhoo_test_condition, y=norm_Cell_count_per_nhood_disease, x=reorder_within(x = disease_short, by = norm_Cell_count_per_nhood_disease, within = Cell_type_scANVI, fun = sum))) + 
+  geom_bar(position="stack", stat="identity") + 
+    #geom_col(width = 0.4) +
+    labs(x = "", y = "Abundance", fill = "Cellular \n compartment") +
+    #scale_y_continuous(expand = c(0,1)) +
+    #scale_fill_manual(values=celcolormap) +
+  facet_wrap(~ Cell_type_scANVI, scales = "free", ncol = 4) +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.05))) +
+  theme_bw() + #coord_flip() +
+  scale_x_reordered() +
+  #geom_text(aes(label = after_stat(y), group = disease_short), 
+            #stat = 'summary', fun = sum, vjust = -0.2, hjust = 0.5) +
+  theme(
+    axis.text.x = element_text(
+      hjust = 1,
+      vjust = 0.5,
+      size = 12,
+      angle = 90
+    ),
+    axis.text = element_text(size = 18, color = "black"),
+    legend.key.size = unit(0.8, 'cm'),
+    legend.text = element_text(size = 18),
+    #axis.line = element_line(colour = "black", linewidth = 0.6),
+    legend.key.width = unit(0.8, "cm"),
+    axis.ticks.x = element_blank(),
+    panel.grid = element_blank(),
+    legend.key.height = unit(0.8, "cm"),
+    plot.title = element_text(size = 18),
+    axis.title = element_text(size = 18),
+    legend.title = element_text(size = 18)
+  )
+
+
+ggsave(str_glue("{figurePath}Cell_per_donor_Milo_myel_From_PMBC_compareDisease_SLE.svg"), width = 9, height = 9, bg='transparent')
+
+ggsave(str_glue("{figurePath}Cell_per_donor_Milo_myel_From_PBMC_compareDisease_SLE.png"), width = 9, height = 9, bg='transparent')
+
+```
+
+```{r fig.fullwidth = TRUE, fig.width=12, fig.height=10}
+my_obs_0_2 = my_obs[my_obs$dataset_id != "Perez_2022" & my_obs$Cell_type_scANVI != "CCR7_CDE3",]
+
+
+my_obs_0_2$disease_short = as.factor(my_obs_0_2$disease_short)
+
+my_obs_0_2$donor_nhoo = paste0(my_obs_0_2$donor_id, "_", my_obs_0_2$nhoo_test_condition)
+
+my_obs_0_2 = my_obs_0_2 %>% dplyr::select(donor_id, donor_nhoo, disease_short, Cell_type_scANVI, nhoo_test_condition) %>% 
+  # Number of cells per donor in each cell type
+  group_by(donor_nhoo, Cell_type_scANVI, disease_short) %>% mutate(total_per_donor_per_celltype = n()) %>% unique() %>%  
+  # total number of cells per donor
+  group_by(donor_id) %>% mutate(Cell_count_per_donor=sum(total_per_donor_per_celltype)) %>% unique() %>% ungroup() %>% 
+  # Cells per 1000
+  mutate(Cell_per_1000=total_per_donor_per_celltype*1000/Cell_count_per_donor) %>% unique() %>% 
+  group_by(donor_id) %>% mutate(dsum = sum(Cell_per_1000)) %>% 
+  # number of cell per nhood per disease
+  group_by(disease_short, Cell_type_scANVI, nhoo_test_condition) %>% mutate(norm_Cell_count_per_nhood_disease=sum(Cell_per_1000))
+
+#some donors have only one cell type (Cell_per_1000==1000)
+
+my_obs_0_3 = unique(my_obs_0_2[,c(3:5,10)])
+
+ggplot(my_obs_0_3, aes(fill=nhoo_test_condition, y=norm_Cell_count_per_nhood_disease, x=reorder_within(x = disease_short, by = norm_Cell_count_per_nhood_disease, within = Cell_type_scANVI, fun = sum))) + 
+  geom_bar(position="stack", stat="identity") + 
+    #geom_col(width = 0.4) +
+    labs(x = "", y = "Abundance", fill = "Cellular \n compartment") +
+    #scale_y_continuous(expand = c(0,1)) +
+    #scale_fill_manual(values=celcolormap) +
+  facet_wrap(~ Cell_type_scANVI, scales = "free", ncol = 4) +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.05))) +
+  theme_bw() + #coord_flip() +
+  scale_x_reordered() +
+  #geom_text(aes(label = after_stat(y), group = disease_short), 
+            #stat = 'summary', fun = sum, vjust = -0.2, hjust = 0.5) +
+  theme(
+    axis.text.x = element_text(
+      hjust = 1,
+      vjust = 0.5,
+      size = 12,
+      angle = 90
+    ),
+    axis.text = element_text(size = 18, color = "black"),
+    legend.key.size = unit(0.8, 'cm'),
+    legend.text = element_text(size = 18),
+    #axis.line = element_line(colour = "black", linewidth = 0.6),
+    legend.key.width = unit(0.8, "cm"),
+    axis.ticks.x = element_blank(),
+    panel.grid = element_blank(),
+    legend.key.height = unit(0.8, "cm"),
+    plot.title = element_text(size = 18),
+    axis.title = element_text(size = 18),
+    legend.title = element_text(size = 18)
+  )
+
+
+ggsave(str_glue("{figurePath}Cell_per_donor_Milo_myel_From_PMBC_compareDisease.svg"), width = 12, height = 10, bg='transparent')
+
+ggsave(str_glue("{figurePath}Cell_per_donor_Milo_myel_From_PBMC_compareDisease.png"), width = 12, height = 10, bg='transparent')
+
+```
+
+```{r fig.fullwidth = TRUE, fig.width=18, fig.height=16}
+my_obs_0_2 = my_obs[my_obs$Cell_type_scANVI != "CCR7_CDE3",]
+
+
+my_obs_0_2$disease_short = as.factor(my_obs_0_2$disease_short)
+
+my_obs_0_2 = my_obs_0_2 %>% dplyr::select(donor_id, disease_short, Cell_type_scANVI) %>% 
+  # Number of cells per donor in each cell type
+  group_by(donor_id, Cell_type_scANVI, disease_short) %>% mutate(total_per_donor_per_celltype = n()) %>% unique() %>%  
+  # total number of cells per donor
+  group_by(donor_id) %>% mutate(Cell_count_per_donor=sum(total_per_donor_per_celltype)) %>% unique() %>% ungroup() %>% 
+  # Cells per 1000
+  mutate(Cell_per_1000=total_per_donor_per_celltype*1000/Cell_count_per_donor) %>% unique()
+
+#some donors have only one cell type (Cell_per_1000==1000)
+
+ggplot(my_obs_0_2, aes(y=Cell_per_1000/10, x=reorder_within(x = disease_short, by = Cell_per_1000, within = Cell_type_scANVI, fun = mean))) + 
+    geom_boxplot() +
+    geom_beeswarm(stat="identity") + 
+
+    labs(x = "Tissue", y = "Percentage of cell per donor", fill = "DA") +
+    facet_wrap(~ Cell_type_scANVI, scales = "free", ncol = 4) +
+    scale_y_continuous(expand = expansion(mult = c(0, 0.05))) +
+    theme_bw() + #coord_flip() + 
+    scale_x_reordered() +
+  theme(
+    axis.text.x = element_text(
+      hjust = 1,
+      vjust = 1,
+      size = 10,
+      angle = 45
+    ),
+    
+    axis.text = element_text(size = 18, color = "black"),
+    legend.key.size = unit(0.8, 'cm'),
+    legend.text = element_text(size = 18),
+    #axis.line = element_line(colour = "black", linewidth = 0.6),
+    legend.key.width = unit(0.8, "cm"),
+    axis.ticks.x = element_blank(),
+    panel.grid = element_blank(),
+    legend.key.height = unit(0.8, "cm"),
+    plot.title = element_text(size = 18),
+    axis.title = element_text(size = 18),
+    legend.title = element_text(size = 18)
+  )
+
+
+ggsave(str_glue("{figurePath}Cell_per_donor_Milo_myel_From_PBMC_compareDisease.svg"), width = 18, height = 16, bg='transparent')
+
+ggsave(str_glue("{figurePath}Cell_per_donor_Milo_myel_From_PBMC_compareDisease.png"), width = 18, height = 16, bg='transparent')
+
+```
+
+##### Figure 3B: Cell abundance across diseases
+
+```{r fig.fullwidth = TRUE, fig.width=12, fig.height=4}
+#myobs = my_obs %>% filter(disease_short!="Healthy") %>% group_by(Cell_type_scANVI, disease_short) %>% summarise(Cell_count=n())
+myobs_1 = my_obs[my_obs$Cell_type_scANVI != "CCR7_CDE3",] %>% group_by(Cell_type_scANVI, disease_short) %>% summarise(Cell_count=n())
+
+#my_obs$tissue = ifelse(my_obs$tissue == "Macrophage", "Synovium", as.character(my_obs$tissue))
+
+
+myobs_1$disease_short = factor(myobs_1$disease_short, levels = c(sort(as.character(
+  unique(myobs_1$disease_short[myobs_1$disease_short != "Healthy"])
+), decreasing = T), "Healthy"))
+#head(my_obs)
+celcompodisease = ggplot(myobs_1, aes(fill=Cell_type_scANVI, y=Cell_count, x=disease_short)) + 
+    geom_bar(position="fill", stat="identity") + 
+    #geom_col(width = 0.4) +
+    labs(x = "", y = "Composition (%)", fill = "Cell compartment") +
+    scale_y_continuous(expand = c(0,0)) +
+    scale_fill_manual(values=color_cell_pbmc) +
+    theme_classic() + coord_flip() + 
+    theme(axis.text.x = element_text(hjust=1, vjust = 0.5, size = 22, angle = 90),
+          axis.text.y = element_text(size=22),
+          axis.title = element_text(size=22),
+         legend.key.size = unit(1, 'cm'),
+         legend.text = element_text(size=22),
+         legend.title = element_text(size=22),
+         axis.line = element_line(colour = "black", linewidth = 0.6),
+         legend.key.width = unit(0.6, "cm"),
+         legend.key.height = unit(0.6, "cm")) #+ scale_colour_brewer(palette = "Paired") 
+    
+celcompodisease
+
+
+ggsave(str_glue("{figurePath}/Myeloid_cell_abundance_Disease_PBMC.svg"), width = 10, height = 4, bg='transparent')
+
+ggsave(str_glue("{figurePath}/Myeloid_cell_abundance_Disease_PBMC.png"), width = 12, height = 4, bg='transparent')
+```
+
+### Figure 3BX´
+
+```{r fig.fullwidth = TRUE, fig.width=5, fig.height=6}
+#myobs = my_obs %>% filter(disease_short!="Healthy") %>% group_by(Cell_type_scANVI, disease_short) %>% summarise(Cell_count=n())
+myobs_1 = my_obs[my_obs$Cell_type_scANVI != "CCR7_CDE3",] %>% group_by(Cell_type_scANVI, disease_short) %>% summarise(Cell_count=n())
+
+#my_obs$tissue = ifelse(my_obs$tissue == "Macrophage", "Synovium", as.character(my_obs$tissue))
+
+myobs_1$disease_short = factor(myobs_1$disease_short, levels = c("Healthy", sort(as.character(
+  unique(myobs_1$disease_short[myobs_1$disease_short != "Healthy"])
+))))
+#head(my_obs)
+celcompodisease = ggplot(myobs_1, aes(fill=Cell_type_scANVI, y=Cell_count, x=disease_short)) + 
+    geom_bar(position="fill", stat="identity") + 
+    #geom_col(width = 0.4) +
+    labs(x = "", y = "Composition (%)", fill = "Cell compartment") +
+    scale_y_continuous(expand = c(0,0)) +
+    scale_fill_manual(values=color_cell_pbmc) +
+    theme_classic() +# coord_flip() + 
+    theme(axis.text.x = element_text(hjust=1, vjust = 0.5, size = 18, angle = 90),
+          axis.text.y = element_text(size=18),
+          axis.title = element_text(size=18),
+         legend.key.size = unit(1, 'cm'),
+         legend.text = element_text(size=18),
+         legend.title = element_text(size=18),
+         axis.line = element_line(colour = "black", linewidth = 0.6),
+         legend.key.width = unit(0.6, "cm"),
+         legend.key.height = unit(0.6, "cm")) #+ scale_colour_brewer(palette = "Paired") 
+    
+celcompodisease
+
+
+#ggsave(str_glue("{figurePath}/Myeloid_cell_abundance_Disease_PBMC_vertical.svg"), width = 5, height = 5, bg='transparent')
+
+ggsave(str_glue("{figurePath}/Myeloid_cell_abundance_Disease_PBMC_vertical.png"), width = 5, height = 6, bg='transparent')
+```
+
+```{r fig.fullwidth = TRUE, fig.width=7, fig.height=6}
+myobs = my_obs %>% filter(disease_short!="Healthy") %>% group_by(Cell_type_scANVI, disease_short) %>% summarise(Cell_count=n())
+
+celcompodisease2 = ggplot(myobs, aes(fill=Cell_type_scANVI, y=Cell_count, x=reorder(disease_short, Cell_count))) + 
+    geom_bar(position="stack", stat="identity") + 
+    #geom_col(width = 0.4) +
+    labs(x = "", y = "Composition", fill = "Cellular \n compartment") +
+    #scale_y_log10(expand = c(0,1)) +
+    scale_fill_manual(values=color_cell_pbmc) +
+    theme_bw() + #coord_flip() +
+    geom_text(aes(label = after_stat(y), group = disease_short), 
+              stat = 'summary', fun = sum, vjust = -0.2, hjust = 0.5) +
+    theme(axis.text.x = element_text(hjust=1, vjust = 0.5, size = 12, angle = 90),
+          axis.text.y = element_text(size=12, color = "black"),
+         legend.key.size = unit(0.6, 'cm'),
+         legend.text = element_text(size=10),
+         #axis.line = element_line(colour = "black", linewidth = 0.6),
+         legend.key.width = unit(0.4, "cm"),
+         axis.ticks.x = element_blank(),
+         panel.grid = element_blank(),
+         legend.key.height = unit(0.4, "cm")) #+ scale_colour_brewer(palette = "Paired") 
+    
+celcompodisease2
+
+
+ggsave(str_glue("{figurePath}/Myeloid_cell_abundance_Disease_PBMC_Stack.svg"), bg='transparent')
+```
+
+### Healthy tissue
+
+```{r fig.fullwidth = TRUE, fig.width=4, fig.height=6}
+
+myobs_ctrl = my_obs %>% filter(disease_short=="Healthy") %>% group_by(Cell_type_scANVI, dataset_id) %>% summarise(Cell_count=n())
+
+
+celcompocontrol = ggplot(myobs_ctrl, aes(fill=Cell_type_scANVI, y=Cell_count, x=reorder(dataset_id, Cell_count))) + 
+    geom_bar(position="stack", stat="identity") + 
+    #geom_col(width = 0.4) +
+    labs(x = "", y = "Composition", fill = "Cellular \n compartment") +
+    scale_y_log10(expand = c(0,0)) +
+    scale_fill_manual(values=color_cell_pbmc) +
+    theme_bw() + #coord_flip() +
+    #geom_text(aes(label = after_stat(y), group = PBMC_harmo), 
+             # stat = 'summary', fun = sum, vjust = -0.2, hjust = 0.5) +
+    theme(axis.text.x = element_text(hjust=1, vjust = 0.5, size = 12, angle = 90),
+          axis.text.y = element_text(size=12, color = "black"),
+         legend.key.size = unit(0.6, 'cm'),
+         legend.text = element_text(size=10),
+         #axis.line = element_line(colour = "black", linewidth = 0.6),
+         legend.key.width = unit(0.4, "cm"),
+         axis.ticks.x = element_blank(),
+         panel.grid = element_blank(),
+         legend.key.height = unit(0.4, "cm")) #+ scale_colour_brewer(palette = "Paired") 
+    
+celcompocontrol
+
+
+ggsave(str_glue("{figurePath}/Myeloid_cell_abundance_Healthy_control_PBMC_Macrophage_Stack.svg"), bg='transparent')
+```
+
+```{r}
+unique(my_obs$Cell_type_scANVI)
+```
+
+```{r}
+unique(my_obs$disease_short)
+```
+
+##### DC1
+
+```{r fig.fullwidth = TRUE, fig.width=5, fig.height=4}
+
+
+plot_Cell_per_1000_per_donor(data = my_obs_0_2[my_obs_0_2$Cell_type_scANVI=="DC1",], disease_column = "disease_short", legend_title="Disease", xlab = "", ylab = "DC1 Cells count/1000 cells", color_dis_tis = color_disease_pbmc)
+
+
+
+ggsave(str_glue("{figurePath}Cell_per_1000_per_donor_Milo_myel_From_PBMC_compareDisease_DC1.svg"), width = 5, height = 4, bg='transparent')
+```
+
+##### DC2
+
+```{r fig.fullwidth = TRUE, fig.width=5, fig.height=4}
+
+# "Activated cMon"    "CCR7_CDE3" "cMon"    "DC2"       "Non-cMon"  "Mon_SIRPA" "DC1"       "pDC"
+plot_Cell_per_1000_per_donor(data = my_obs_0_2[my_obs_0_2$Cell_type_scANVI=="DC2",], disease_column = "disease_short", legend_title="Disease",
+                             xlab = "", ylab = "DC2 Cells count/1000 cells", color_dis_tis = color_disease_pbmc)
+
+
+
+ggsave(str_glue("{figurePath}Cell_per_1000_per_donor_Milo_myel_From_PBMC_compareDisease_DC2.svg"), width = 5, height = 4, bg='transparent')
+```
+
+##### Non cMon
+
+```{r fig.fullwidth = TRUE, fig.width=6, fig.height=4}
+
+
+# "Activated cMon"    "CCR7_CDE3" "cMon"    "DC2"       "Non-cMon"  "Mon_SIRPA" "DC1"       "pDC"
+plot_Cell_per_1000_per_donor(data = my_obs_0_2[my_obs_0_2$Cell_type_scANVI=="Non-cMon",], disease_column = "disease_short", legend_title="Disease", xlab = "", ylab = "Non-cMon \nCells count/1000 cells", color_dis_tis = color_disease_pbmc)
+
+
+
+ggsave(str_glue("{figurePath}Cell_per_1000_per_donor_Milo_myel_From_PBMC_compareDisease_Non_cMon.svg"), width = 6, height = 4, bg='transparent')
+```
+
+##### pDC
+
+```{r fig.fullwidth = TRUE, fig.width=5, fig.height=4}
+
+
+# "Activated cMon"    "CCR7_CDE3" "cMon"    "Mon_SIRPA" "DC1"       "pDC"
+plot_Cell_per_1000_per_donor(data = my_obs_0_2[my_obs_0_2$Cell_type_scANVI=="pDC",], disease_column = "disease_short", legend_title="Disease",
+                             xlab = "", ylab = "pDC Cells count/1000 cells", color_dis_tis = color_disease_pbmc)
+
+
+
+ggsave(str_glue("{figurePath}Cell_per_1000_per_donor_Milo_myel_From_PBMC_compareDisease_pDC.svg"), width = 5, height = 4, bg='transparent')
+```
+
+##### Activated cMon
+
+```{r fig.width=8, fig.height=3}
+#[my_obs$dataset_id %in% c("GSE157278_Hong_2020", "GSE163314_Lefferts_2021", "Perez_2022") &
+
+my_obs$Cell_type_scANVI = as.factor(my_obs$Cell_type_scANVI)
+
+my_obs[my_obs$Cell_type_scANVI=="Activated cMon",] %>% 
+dplyr::select(nhoo_test_condition, dataset_id, disease_short, Cell_type_scANVI) %>% mutate(dataset_id = str_remove(dataset_id, "GSE[0-9]*_{1}"),
+                                                                                     disease_short = str_remove(disease_short, "all_")) %>% 
+  group_by(nhoo_test_condition, dataset_id, Cell_type_scANVI, disease_short) %>% mutate(count = n()) %>% unique() %>%
+  ggplot(aes(fill=nhoo_test_condition, y=count, x= reorder(disease_short, count))) + 
+  geom_bar(position="stack", stat="identity", color = "white") + 
+  labs(x = "", y = "Nhood Composition", fill = "nhood") +
+  facet_wrap(~ dataset_id, scales = "free", ncol = 5) +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.05))) +
+  theme_bw() + #coord_flip() +
+  scale_fill_manual(values = c(Enriched = "#459395", Depleted = "#FDA638", Non_sig = "grey50")) + #459395 EB7C69 FDA638
+  scale_x_reordered() +
+  theme(
+    axis.text.x = element_text(
+      hjust = 1,
+      vjust = 0.5,
+      size = 12,
+      angle = 90
+    ),
+    axis.text.y = element_text(size = 12, color = "black"),
+    axis.text.x.bottom = element_blank(),
+    legend.key.size = unit(0.6, 'cm'),
+    legend.text = element_text(size = 10),
+    #axis.line = element_line(colour = "black", linewidth = 0.6),
+    legend.key.width = unit(0.4, "cm"),
+    axis.ticks.x = element_blank(),
+    panel.grid = element_blank(),
+    legend.key.height = unit(0.4, "cm")
+  )
+
+ggsave(str_glue("{figurePath}Nhood_abundance_Milo_myel_From_PBMC_compareDisease_cMon_1.svg"), width = 5.5, height = 3, bg='transparent')
+ggsave(str_glue("{figurePath}Nhood_abundance_Milo_myel_From_PBMC_compareDisease_cMon_1.png"), width = 5.5, height = 3, bg='transparent')
+
+#"#1f77b4" "#aec7e8" "#ff7f0e" "#ffbb78" "#2ca02c" "#98df8a" "#d62728" "#ff9896" "#9467bd" "#c5b0d5" "#8c564b" "#c49c94" "#e377c2" "#f7b6d2" "#7f7f7f" "#c7c7c7" "#bcbd22" "#dbdb8d" "#17becf" "#9edae5"
+
+```
+
+```{r fig.fullwidth = TRUE, fig.width=5, fig.height=4}
+
+
+# "Activated cMon"    "CCR7_CDE3" "cMon"   "Mon_SIRPA"
+plot_Cell_per_1000_per_donor(data = my_obs_0_2[my_obs_0_2$Cell_type_scANVI=="Activated cMon",], disease_column = "disease_short", legend_title="Disease", axis.size = 15,
+                             xlab = "", ylab = "Activated cMon Cells count/1000 cells", color_dis_tis = color_disease_pbmc)
+
+
+
+ggsave(str_glue("{figurePath}Cell_per_1000_per_donor_Milo_myel_From_PBMC_compareDisease_cMon_1.svg"), width = 5, height = 4, bg='transparent')
+```
+
+##### cMon
+
+```{r fig.width=10, fig.height=6}
+#[my_obs$dataset_id %in% c("GSE157278_Hong_2020", "GSE163314_Lefferts_2021", "Perez_2022") &
+
+my_obs$Cell_type_scANVI = as.factor(my_obs$Cell_type_scANVI)
+
+my_obs[my_obs$Cell_type_scANVI == "cMon", ] %>%
+  dplyr::select(nhoo_test_condition,
+                dataset_id,
+                disease_short,
+                Cell_type_scANVI) %>% mutate(
+                  dataset_id = str_remove(dataset_id, "GSE[0-9]*_{1}"),
+                  disease_short = str_remove(disease_short, "all_")
+                ) %>% 
+  group_by(nhoo_test_condition, dataset_id, Cell_type_scANVI, disease_short) %>% mutate(count = n()) %>% unique() %>%
+  ggplot(aes(fill=nhoo_test_condition, y=count, x= reorder(disease_short, count))) + 
+  geom_bar(position="stack", stat="identity", color = "white") + 
+  labs(x = "", y = "Nhood Composition", fill = "nhood") +
+  facet_wrap(~ dataset_id, scales = "free", ncol = 5) +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.05))) +
+  theme_bw() + #coord_flip() +
+  scale_fill_manual(values = c(Enriched = "#459395", Depleted = "#FDA638", Non_sig = "grey50")) + #459395 EB7C69 FDA638
+  scale_x_reordered() +
+  theme(
+    axis.text.x = element_text(
+      hjust = 1,
+      vjust = 0.5,
+      size = 12,
+      angle = 90
+    ),
+    axis.text.y = element_text(size = 12, color = "black"),
+    #axis.text.x.bottom = element_blank(),
+    legend.key.size = unit(0.6, 'cm'),
+    legend.text = element_text(size = 10),
+    #axis.line = element_line(colour = "black", linewidth = 0.6),
+    legend.key.width = unit(0.4, "cm"),
+    axis.ticks.x = element_blank(),
+    panel.grid = element_blank(),
+    legend.key.height = unit(0.4, "cm")
+  )
+
+ggsave(str_glue("{figurePath}Nhood_abundance_Milo_myel_From_PBMC_compareDisease_cMon_2.svg"), width = 10, height = 6, bg='transparent')
+ggsave(str_glue("{figurePath}Nhood_abundance_Milo_myel_From_PBMC_compareDisease_cMon_2.png"), width = 10, height = 6, bg='transparent')
+
+#"#1f77b4" "#aec7e8" "#ff7f0e" "#ffbb78" "#2ca02c" "#98df8a" "#d62728" "#ff9896" "#9467bd" "#c5b0d5" "#8c564b" "#c49c94" "#e377c2" "#f7b6d2" "#7f7f7f" "#c7c7c7" "#bcbd22" "#dbdb8d" "#17becf" "#9edae5"
+
+```
+
+```{r fig.fullwidth = TRUE, fig.width=5, fig.height=4}
+
+# "CCR7_CDE3" "cMon" "Mon_SIRPA"
+plot_Cell_per_1000_per_donor(data = my_obs_0_2[my_obs_0_2$Cell_type_scANVI=="cMon",], disease_column = "disease_short", legend_title="Disease",
+                             xlab = "", ylab = "cMon Cells count/1000 cells", color_dis_tis = color_disease_pbmc)
+
+
+
+ggsave(str_glue("{figurePath}Cell_per_1000_per_donor_Milo_myel_From_PBMC_compareDisease_cMon_2.svg"), width = 5, height = 4, bg='transparent')
+
+```
+
+##### Mon_SIRPA
+
+```{r fig.fullwidth = TRUE, fig.width=6, fig.height=4}
+
+# "CCR7_CDE3" "Mon_SIRPA"
+plot_Cell_per_1000_per_donor(data = my_obs_0_2[my_obs_0_2$Cell_type_scANVI=="Mon_SIRPA",], disease_column = "disease_short", legend_title="Disease",
+                             xlab = "", ylab = "Mon_SIRPA \nCells count/1000 cells", color_dis_tis = color_disease_pbmc)
+
+
+
+ggsave(str_glue("{figurePath}Cell_per_1000_per_donor_Milo_myel_From_PBMC_compareDisease_Mon_SIRPA.svg"), width = 6, height = 4, bg='transparent')
+
+```
+
+##### CCR7_CDE3
+
+```{r fig.fullwidth = TRUE, fig.width=6, fig.height=4}
+
+# "Activated cMon"    "CCR7_CDE3" "cMon"    "DC2"       "Non-cMon"  "Mon_SIRPA" "DC1"       "pDC"
+plot_Cell_per_1000_per_donor(data = my_obs_0_2[my_obs_0_2$Cell_type_scANVI=="CCR7_CDE3",], disease_column = "disease_short", legend_title="Disease",
+                             xlab = "", ylab = "CCR7_CDE3 \nCells count/1000 cells", color_dis_tis = color_disease_pbmc)
+
+
+
+ggsave(str_glue("{figurePath}Cell_per_1000_per_donor_Milo_myel_From_PBMC_compareDisease_CCR7_CDE3.svg"), width = 6, height = 4, bg='transparent')
+
+```
+
+### Disease gene program
+
+```{r}
+colnames(colData(test_adata_))
+
+test_adata_$Cell_type_scANVI %>% unique()
+
+test_adata_$disease_short %>% unique()
+```
+
+#### Activated cMon
+
+```{r}
+
+levels(test_adata_$Cell_type_scANVI)
+```
+
+```{r}
+test_adata_$nhoo = case_when(test_adata_$nhoo_test_condition=="Enriched" ~ "Enriched",
+                                            TRUE ~ "Rest") %>% as.factor()
+
+table(test_adata_$disease_short, test_adata_$dataset_id)
+
+
+test_adata_$disease_nhoo = paste0(test_adata_$disease_short, "_", test_adata_$nhoo_test_condition) %>% as.factor()
+
+table(test_adata_$disease_nhoo, test_adata_$Cell_type_scANVI)
+
+```
+
+```{r}
+test_adata_$disease_short %>% unique()
+```
+
+```{r}
+test_adata_$Cell_type_scANVI %>% unique()
+
+test_adata_$Cell_type_scANVI = case_when(
+  test_adata_$Cell_type_scANVI == "cMon_1" ~ "Activated cMon",
+  test_adata_$Cell_type_scANVI == "cMon_2" ~ "cMon",
+  TRUE ~ test_adata_$Cell_type_scANVI
+)
+
+test_adata_$Cell_type_scANVI %>% unique()
+```
+
+##### ALL disease
+
+```{r}
+
+
+cMon_1_deg = disease_nhoo_program(test_adata=test_adata_,
+                                
+                                lfc = 1,
+                                
+                                dir_fc = "Enriched",
+                                
+                                p.val = 0.05,
+                                
+                                cel_type="Activated cMon",
+                                var_column = "disease_short",
+                                comparison="selected_nhoo",
+                                covariable.dataset=T, hvgs = TRUE)
+
+
+
+# cMon_1_deg_dis_ctrl = disease_nhoo_program(test_adata=test_adata_,
+#                                 
+#                                 lfc = 1,
+#                                 
+#                                 dir_fc = "Enriched",
+#                                 
+#                                 p.val = 0.05,
+#                                 
+#                                 cel_type="Activated cMon",
+#                                 var_column = "disease_short",
+#                                 comparison="dis_vs_ctrl",
+#                                 covariable.dataset=T, hvgs = TRUE)
+
+
+cMon_1_deg_dis_ctrl = run_deg(
+  test_adata = test_adata_,#[,test_adata_$dataset_id=="GSE163314_Lefferts_2021"],
+  lfc = 1,
+  p.val = 0.05,
+  cel_type = "Activated cMon",
+  test_col="disease_short",
+  ctrl="Healthy",
+  var_column = "disease_short",
+  var.included = c("all_CD", "all_SLE", "all_hashimoto", "all_sjo_syndr", "all_spondoarthritis", "Healthy"),
+  covar = "dataset_id",
+  covariable.dataset = T
+)
+
+
+write.csv(cMon_1_deg_dis_ctrl,
+          str_glue("{degPathEnriched}cMon_1_deg_dis_ctrl.csv"))
+
+cMon_1_deg_dis_ctrl_up = data.frame(name=cMon_1_deg_dis_ctrl$name[cMon_1_deg_dis_ctrl$dirFC=="Up"], celltype="Activated cMon")
+write.csv(cMon_1_deg_dis_ctrl_up,
+          str_glue("{degPathEnriched}Shared/cMon_1_deg_dis_ctrl.csv"))
+
+
+cMon_1_deg_dis_nhoo = disease_nhoo_program(test_adata=test_adata_,
+                                
+                                lfc = 1,
+                                
+                                dir_fc = "Enriched",
+                                
+                                p.val = 0.05,
+                                
+                                cel_type="Activated cMon",
+                                var_column = "disease_short",
+                                comparison="between_nhoo",
+                                covariable.dataset=T, hvgs = TRUE)
+
+```
+
+##### SLE
+
+```{r}
+table(test_adata_$disease_short, test_adata_$dataset_id)
+```
+
+```{r}
+cMon_1_SLE_deg = disease_nhoo_program(test_adata=test_adata_[,test_adata_$dataset_id=="Perez_2022"],
+                                
+                                lfc = 1,
+                                
+                                dir_fc = "Enriched",
+                                
+                                p.val = 0.05,
+                                
+                                cel_type="Activated cMon",
+                                var_column = "disease_short",
+                                comparison="selected_nhoo",
+                                covariable.dataset = FALSE, hvgs = TRUE)
+
+
+
+
+
+# cMon_1_SLE_deg_dis_ctrl = disease_nhoo_program(test_adata=test_adata_[,test_adata_$dataset_id=="Perez_2022"],
+#                                 
+#                                 lfc = 1,
+#                                 
+#                                 dir_fc = "Enriched",
+#                                 
+#                                 p.val = 0.05,
+#                                 
+#                                 cel_type="Activated cMon",
+#                                 var_column = "disease_short",
+#                                 comparison="dis_vs_ctrl",
+#                                 covariable.dataset = FALSE, hvgs = TRUE)
+
+
+
+
+cMon_1_SLE_deg_dis_ctrl = run_deg(
+  test_adata = test_adata_[,test_adata_$dataset_id=="Perez_2022"],
+  lfc = 1,
+  p.val = 0.05,
+  cel_type = "Activated cMon",
+  test_col="disease_short",
+  ctrl="Healthy",
+  var_column = "disease_short",
+  var.included = c("Healthy", "all_SLE"),
+  covariable.dataset = F
+)
+
+
+write.csv(cMon_1_SLE_deg_dis_ctrl,
+          str_glue("{degPathEnriched}cMon_1_SLE_deg_dis_ctrl.csv"))
+
+
+
+
+cMon_1_SLE_deg_dis_nhoo = disease_nhoo_program(test_adata=test_adata_[,test_adata_$dataset_id=="Perez_2022"],
+                                
+                                lfc = 1,
+                                
+                                dir_fc = "Enriched",
+                                
+                                p.val = 0.05,
+                                
+                                cel_type="Activated cMon",
+                                var_column = "disease_short",
+                                comparison="between_nhoo",
+                                covariable.dataset = FALSE, hvgs = TRUE)
+
+```
+
+```{r}
+table(test_adata_$disease_short, test_adata_$dataset_id)
+```
+
+##### Sjo_syndr
+
+```{r}
+cMon_1_Sjo_syndr_deg = disease_nhoo_program(
+  test_adata = test_adata_[, test_adata_$dataset_id == "GSE157278_Hong_2020"],
+  
+  lfc = 1,
+  
+  dir_fc = "Enriched",
+  
+  p.val = 0.05,
+  
+  cel_type = "Activated cMon",
+  var_column = "disease_short",
+  comparison = "selected_nhoo",
+  covariable.dataset = FALSE,
+  hvgs = TRUE
+)
+
+
+
+# cMon_1_Sjo_syndr_deg_dis_ctrl = disease_nhoo_program(test_adata=test_adata_[,test_adata_$dataset_id=="GSE157278_Hong_2020"],
+#                                 
+#                                 lfc = 1,
+#                                 
+#                                 dir_fc = "Enriched",
+#                                 
+#                                 p.val = 0.05,
+#                                 
+#                                 cel_type="Activated cMon",
+#                                 var_column = "disease_short",
+#                                 comparison="dis_vs_ctrl",
+#                                 covariable.dataset = FALSE, hvgs = TRUE)
+
+
+cMon_1_Sjo_syndr_deg_dis_ctrl = run_deg(
+  test_adata = test_adata_[,test_adata_$dataset_id=="GSE157278_Hong_2020"],
+  lfc = 1,
+  p.val = 0.05,
+  cel_type = "Activated cMon",
+  test_col="disease_short",
+  ctrl="Healthy",
+  var_column = "disease_short",
+  var.included = c("Healthy", "all_sjo_syndr"),
+  covariable.dataset = F
+)
+
+
+write.csv(cMon_1_Sjo_syndr_deg_dis_ctrl,
+          str_glue("{degPathEnriched}cMon_1_Sjo_syndr_deg_dis_ctrl.csv"))
+
+
+cMon_1_Sjo_syndr_deg_dis_nhoo = disease_nhoo_program(test_adata=test_adata_[,test_adata_$dataset_id=="GSE157278_Hong_2020"],
+                                
+                                lfc = 1,
+                                
+                                dir_fc = "Enriched",
+                                
+                                p.val = 0.05,
+                                
+                                cel_type="Activated cMon",
+                                var_column = "disease_short",
+                                comparison="between_nhoo",
+                                covariable.dataset = FALSE, hvgs = TRUE)
+
+```
+
+```{r}
+table(test_adata_$disease_short, test_adata_$dataset_id)
+```
+
+##### Spondoarthritis
+
+```{r}
+cMon_1_Spondoarthritis_deg = disease_nhoo_program(test_adata=test_adata_[,test_adata_$dataset_id=="GSE163314_Lefferts_2021" & test_adata_$disease_short %in% c("all_spondoarthritis", "Healthy")],
+                                
+                                lfc = 1,
+                                
+                                dir_fc = "Enriched",
+                                
+                                p.val = 0.05,
+                                
+                                cel_type="Activated cMon",
+                                var_column = "disease_short",
+                                comparison="selected_nhoo",
+                                covariable.dataset = FALSE, hvgs = TRUE)
+
+
+
+# cMon_1_Spondoarthritis_deg_dis_ctrl = disease_nhoo_program(test_adata=test_adata_[,test_adata_$dataset_id=="GSE163314_Lefferts_2021" & test_adata_$disease_short %in% c("all_spondoarthritis", "Healthy")],
+#                                 
+#                                 lfc = 1,
+#                                 
+#                                 dir_fc = "Enriched",
+#                                 
+#                                 p.val = 0.05,
+#                                 
+#                                 cel_type="Activated cMon",
+#                                 var_column = "disease_short",
+#                                 comparison="dis_vs_ctrl",
+#                                 covariable.dataset = FALSE, hvgs = TRUE)
+
+
+cMon_1_Spondoarthritis_deg_dis_ctrl = run_deg(
+  test_adata = test_adata_[,test_adata_$dataset_id=="GSE163314_Lefferts_2021"],
+  lfc = 1,
+  p.val = 0.05,
+  cel_type = "Activated cMon",
+  test_col="disease_short",
+  ctrl="Healthy",
+  var_column = "disease_short",
+  var.included = c("all_spondoarthritis", "Healthy"),
+  covariable.dataset = F
+)
+
+
+write.csv(cMon_1_Spondoarthritis_deg_dis_ctrl,
+          str_glue("{degPathEnriched}cMon_1_Spondoarthritis_deg_dis_ctrl.csv"))
+
+
+cMon_1_Spondoarthritis_deg_dis_nhoo = disease_nhoo_program(test_adata=test_adata_[,test_adata_$dataset_id=="GSE163314_Lefferts_2021" & test_adata_$disease_short %in% c("all_spondoarthritis", "Healthy")],
+                                
+                                lfc = 1,
+                                
+                                dir_fc = "Enriched",
+                                
+                                p.val = 0.05,
+                                
+                                cel_type="Activated cMon",
+                                var_column = "disease_short",
+                                comparison="between_nhoo",
+                                covariable.dataset = FALSE, hvgs = TRUE)
+
+```
+
+```{r}
+table(test_adata_$disease_short, test_adata_$dataset_id)
+```
+
+##### CD
+
+```{r}
+cMon_1_CD_deg = disease_nhoo_program(test_adata=test_adata_[,test_adata_$dataset_id=="GSE163314_Lefferts_2021" & test_adata_$disease_short %in% c("all_CD", "Healthy")],
+                                
+                                lfc = 1,
+                                
+                                dir_fc = "Enriched",
+                                
+                                p.val = 0.05,
+                                
+                                cel_type="Activated cMon",
+                                var_column = "disease_short",
+                                comparison="selected_nhoo",
+                                covariable.dataset = F, hvgs = TRUE)
+
+
+
+# cMon_1_CD_deg_dis_ctrl = disease_nhoo_program(test_adata=test_adata_[,test_adata_$dataset_id=="GSE163314_Lefferts_2021" & test_adata_$disease_short %in% c("all_CD", "Healthy")],
+#                                 
+#                                 lfc = 1,
+#                                 
+#                                 dir_fc = "Enriched",
+#                                 
+#                                 p.val = 0.05,
+#                                 
+#                                 cel_type="Activated cMon",
+#                                 var_column = "disease_short",
+#                                 comparison="dis_vs_ctrl",
+#                                 covariable.dataset = F, hvgs = TRUE)
+
+
+cMon_1_CD_deg_dis_ctrl = run_deg(
+  test_adata = test_adata_,#[,test_adata_$dataset_id=="GSE163314_Lefferts_2021"],
+  lfc = 1,
+  p.val = 0.05,
+  cel_type = "Activated cMon",
+  test_col="disease_short",
+  ctrl="Healthy",
+  var_column = "disease_short",
+  var.included = c("all_CD", "Healthy"),
+  covar = "dataset_id",
+  covariable.dataset = T
+)
+
+
+write.csv(cMon_1_CD_deg_dis_ctrl,
+          str_glue("{degPathEnriched}cMon_1_CD_deg_dis_ctrl.csv"))
+
+
+cMon_1_CD_deg_dis_nhoo = disease_nhoo_program(test_adata=test_adata_[,test_adata_$dataset_id=="GSE163314_Lefferts_2021" & 
+                                                                       
+                                                                       test_adata_$disease_short %in% c("all_CD", "Healthy")],
+                                
+                                lfc = 1,
+                                
+                                dir_fc = "Enriched",
+                                
+                                p.val = 0.05,
+                                
+                                cel_type="Activated cMon",
+                                var_column = "disease_short",
+                                comparison="between_nhoo",
+                                covariable.dataset = F, hvgs = TRUE)
+
+```
+
+```{r}
+table(test_adata_$disease_short, test_adata_$dataset_id)
+```
+
+##### Hashimoto
+
+```{r}
+cMon_1_hashimoto_deg = disease_nhoo_program(test_adata=test_adata_[,test_adata_$disease_short %in% c("all_hashimoto", "Healthy")],
+                                
+                                lfc = 1,
+                                
+                                dir_fc = "Enriched",
+                                
+                                p.val = 0.05,
+                                
+                                cel_type="Activated cMon",
+                                var_column = "disease_short",
+                                comparison="selected_nhoo",
+                                covariable.dataset = FALSE, hvgs = TRUE)
+
+
+
+cMon_1_hashimoto_deg_dis_ctrl = disease_nhoo_program(test_adata=test_adata_[,test_adata_$disease_short %in% c("all_hashimoto", "Healthy")],
+
+                                lfc = 1,
+
+                                dir_fc = "Enriched",
+
+                                p.val = 0.05,
+
+                                cel_type="Activated cMon",
+                                var_column = "disease_short",
+                                comparison="dis_vs_ctrl",
+                                covariable.dataset = FALSE, hvgs = TRUE)
+
+
+# cMon_1_hashimoto_deg_dis_ctrl = run_deg(
+#   test_adata = test_adata_,#[,test_adata_$dataset_id=="GSE163314_Lefferts_2021"],
+#   lfc = 1,
+#   p.val = 0.05,
+#   cel_type = "Activated cMon",
+#   test_col="disease_short",
+#   ctrl="Healthy",
+#   var_column = "disease_short",
+#   var.included = c("all_hashimoto", "Healthy"),
+#   covar = "dataset_id",
+#   covariable.dataset = T
+# )
+
+
+# write.csv(
+#   cMon_1_hashimoto_deg_dis_ctrl,
+#   str_glue("{degPathEnriched}cMon_1_hashimoto_deg_dis_ctrl.csv")
+# )
+
+cMon_1_hashimoto_deg_dis_nhoo = disease_nhoo_program(test_adata=test_adata_[,test_adata_$disease_short %in% c("all_hashimoto", "Healthy")],
+                                
+                                lfc = 1,
+                                
+                                dir_fc = "Enriched",
+                                
+                                p.val = 0.05,
+                                
+                                cel_type="Activated cMon",
+                                var_column = "disease_short",
+                                comparison="between_nhoo",
+                                covariable.dataset = FALSE, hvgs = TRUE)
+
+```
+
+#### cMon
+
+```{r}
+test_adata_$nhoo = case_when(test_adata_$nhoo_test_condition=="Depleted" ~ "Depleted",
+                                            TRUE ~ "Rest") %>% as.factor()
+
+table(test_adata_$disease_short, test_adata_$nhoo)
+```
+
+```{r}
+
+levels(test_adata_$Cell_type_scANVI)
+```
+
+```{r}
+test_adata_$nhoo = case_when(test_adata_$nhoo_test_condition=="Enriched" ~ "Enriched",
+                                            TRUE ~ "Rest") %>% as.factor()
+
+table(test_adata_$disease_short, test_adata_$dataset_id)
+
+```
+
+```{r}
+test_adata_$nhoo %>% unique()
+```
+
+```{r}
+
+cMon_2_deg = disease_nhoo_program(test_adata=test_adata_,
+                                
+                                lfc = 1,
+                                
+                                dir_fc = "Depleted",
+                                
+                                p.val = 0.05,
+                                
+                                cel_type="cMon",
+                                var_column = "disease_short",
+                                comparison="selected_nhoo", hvgs = TRUE)
+
+
+
+cMon_2_deg_dis_ctrl = disease_nhoo_program(test_adata=test_adata_,
+                                
+                                lfc = 1,
+                                
+                                dir_fc = "Depleted",
+                                
+                                p.val = 0.05,
+                                
+                                cel_type="cMon",
+                                var_column = "disease_short",
+                                comparison="dis_vs_ctrl", hvgs = TRUE)
+
+
+cMon_2_deg_dis_nhoo = disease_nhoo_program(test_adata=test_adata_,
+                                
+                                lfc = 1,
+                                
+                                dir_fc = "Depleted",
+                                
+                                p.val = 0.05,
+                                
+                                cel_type="cMon",
+                                var_column = "disease_short",
+                                comparison="between_nhoo", hvgs = TRUE)
+
+
+```
+
+##### SLE
+
+```{r}
+cMon_2_SLE_deg = disease_nhoo_program(test_adata=test_adata_[,test_adata_$dataset_id=="Perez_2022"],
+                                
+                                lfc = 1,
+                                
+                                dir_fc = "Depleted",
+                                
+                                p.val = 0.05,
+                                
+                                cel_type="cMon",
+                                var_column = "disease_short",
+                                comparison="selected_nhoo",
+                                covariable.dataset = FALSE, hvgs = TRUE)
+
+
+
+cMon_2_SLE_deg_dis_ctrl = disease_nhoo_program(test_adata=test_adata_[,test_adata_$dataset_id=="Perez_2022"],
+                                
+                                lfc = 1,
+                                
+                                dir_fc = "Depleted",
+                                
+                                p.val = 0.05,
+                                
+                                cel_type="cMon",
+                                var_column = "disease_short",
+                                comparison="dis_vs_ctrl",
+                                covariable.dataset = FALSE, hvgs = TRUE)
+
+
+cMon_2_SLE_deg_dis_nhoo = disease_nhoo_program(test_adata=test_adata_[,test_adata_$dataset_id=="Perez_2022"],
+                                
+                                lfc = 1,
+                                
+                                dir_fc = "Depleted",
+                                
+                                p.val = 0.05,
+                                
+                                cel_type="cMon",
+                                var_column = "disease_short",
+                                comparison="between_nhoo",
+                                covariable.dataset = FALSE, hvgs = TRUE)
+
+```
+
+```{r}
+table(test_adata_$disease_short, test_adata_$dataset_id)
+```
+
+##### Sjo_syndr
+
+```{r}
+cMon_2_Sjo_syndr_deg = disease_nhoo_program(test_adata=test_adata_[,test_adata_$dataset_id=="GSE157278_Hong_2020"],
+                                
+                                lfc = 1,
+                                
+                                dir_fc = "Depleted",
+                                
+                                p.val = 0.05,
+                                
+                                cel_type="cMon",
+                                var_column = "disease_short",
+                                comparison="selected_nhoo",
+                                covariable.dataset = FALSE, hvgs = TRUE)
+
+
+
+cMon_2_Sjo_syndr_deg_dis_ctrl = disease_nhoo_program(test_adata=test_adata_[,test_adata_$dataset_id=="GSE157278_Hong_2020"],
+                                
+                                lfc = 1,
+                                
+                                dir_fc = "Depleted",
+                                
+                                p.val = 0.05,
+                                
+                                cel_type="cMon",
+                                var_column = "disease_short",
+                                comparison="dis_vs_ctrl",
+                                covariable.dataset = FALSE, hvgs = TRUE)
+
+
+cMon_2_Sjo_syndr_deg_dis_nhoo = disease_nhoo_program(test_adata=test_adata_[,test_adata_$dataset_id=="GSE157278_Hong_2020"],
+                                
+                                lfc = 1,
+                                
+                                dir_fc = "Depleted",
+                                
+                                p.val = 0.05,
+                                
+                                cel_type="cMon",
+                                var_column = "disease_short",
+                                comparison="between_nhoo",
+                                covariable.dataset = FALSE, hvgs = TRUE)
+
+```
+
+```{r}
+table(test_adata_$disease_short, test_adata_$dataset_id)
+```
+
+##### Spondoarthritis
+
+```{r}
+# cMon_2_Spondoarthritis_deg = disease_nhoo_program(test_adata=test_adata_[,test_adata_$dataset_id=="GSE163314_Lefferts_2021" & test_adata_$disease_short %in% c("all_spondoarthritis", "Healthy")],
+#                                 
+#                                 lfc = 1,
+#                                 
+#                                 dir_fc = "Depleted",
+#                                 
+#                                 p.val = 0.05,
+#                                 
+#                                 cel_type="cMon",
+#                                 var_column = "disease_short",
+#                                 comparison="selected_nhoo",
+#                                 covariable.dataset = FALSE, hvgs = TRUE)
+# 
+# 
+# 
+# cMon_2_Spondoarthritis_deg_dis_ctrl = disease_nhoo_program(test_adata=test_adata_[,test_adata_$dataset_id=="GSE163314_Lefferts_2021" & test_adata_$disease_short %in% c("all_spondoarthritis", "Healthy")],
+#                                 
+#                                 lfc = 1,
+#                                 
+#                                 dir_fc = "Depleted",
+#                                 
+#                                 p.val = 0.05,
+#                                 
+#                                 cel_type="cMon",
+#                                 var_column = "disease_short",
+#                                 comparison="dis_vs_ctrl",
+#                                 covariable.dataset = FALSE, hvgs = TRUE)
+# 
+# 
+# cMon_2_Spondoarthritis_deg_dis_nhoo = disease_nhoo_program(test_adata=test_adata_[,test_adata_$dataset_id=="GSE163314_Lefferts_2021" & test_adata_$disease_short %in% c("all_spondoarthritis", "Healthy")],
+#                                 
+#                                 lfc = 1,
+#                                 
+#                                 dir_fc = "Depleted",
+#                                 
+#                                 p.val = 0.05,
+#                                 
+#                                 cel_type="cMon",
+#                                 var_column = "disease_short",
+#                                 comparison="between_nhoo",
+#                                 covariable.dataset = FALSE, hvgs = TRUE)
+
+```
+
+```{r}
+table(test_adata_$disease_short, test_adata_$dataset_id)
+```
+
+##### CD
+
+```{r}
+cMon_2_CD_deg = disease_nhoo_program(test_adata=test_adata_[,test_adata_$dataset_id=="GSE163314_Lefferts_2021" & test_adata_$disease_short %in% c("all_CD", "Healthy")],
+                                
+                                lfc = 1,
+                                
+                                dir_fc = "Depleted",
+                                
+                                p.val = 0.05,
+                                
+                                cel_type="cMon",
+                                var_column = "disease_short",
+                                comparison="selected_nhoo",
+                                covariable.dataset = F, hvgs = TRUE)
+
+
+
+cMon_2_CD_deg_dis_ctrl = disease_nhoo_program(test_adata=test_adata_[,test_adata_$dataset_id=="GSE163314_Lefferts_2021" & test_adata_$disease_short %in% c("all_CD", "Healthy")],
+                                
+                                lfc = 1,
+                                
+                                dir_fc = "Depleted",
+                                
+                                p.val = 0.05,
+                                
+                                cel_type="cMon",
+                                var_column = "disease_short",
+                                comparison="dis_vs_ctrl",
+                                covariable.dataset = F, hvgs = TRUE)
+
+
+cMon_2_CD_deg_dis_nhoo = disease_nhoo_program(test_adata=test_adata_[,test_adata_$dataset_id=="GSE163314_Lefferts_2021" & 
+                                                                       
+                                                                       test_adata_$disease_short %in% c("all_CD", "Healthy")],
+                                
+                                lfc = 1,
+                                
+                                dir_fc = "Depleted",
+                                
+                                p.val = 0.05,
+                                
+                                cel_type="cMon",
+                                var_column = "disease_short",
+                                comparison="between_nhoo",
+                                covariable.dataset = F, hvgs = TRUE)
+
+```
+
+```{r}
+table(test_adata_$disease_short, test_adata_$dataset_id)
+```
+
+##### Hashimoto
+
+```{r}
+cMon_2_hashimoto_deg = disease_nhoo_program(test_adata=test_adata_[,test_adata_$disease_short %in% c("all_hashimoto", "Healthy")],
+                                
+                                lfc = 1,
+                                
+                                dir_fc = "Depleted",
+                                
+                                p.val = 0.05,
+                                
+                                cel_type="cMon",
+                                var_column = "disease_short",
+                                comparison="selected_nhoo",
+                                covariable.dataset = FALSE, hvgs = TRUE)
+
+
+
+cMon_2_hashimoto_deg_dis_ctrl = disease_nhoo_program(test_adata=test_adata_[,test_adata_$disease_short %in% c("all_hashimoto", "Healthy")],
+                                
+                                lfc = 1,
+                                
+                                dir_fc = "Depleted",
+                                
+                                p.val = 0.05,
+                                
+                                cel_type="cMon",
+                                var_column = "disease_short",
+                                comparison="dis_vs_ctrl",
+                                covariable.dataset = FALSE, hvgs = TRUE)
+
+
+cMon_2_hashimoto_deg_dis_nhoo = disease_nhoo_program(test_adata=test_adata_[,test_adata_$disease_short %in% c("all_hashimoto", "Healthy")],
+                                
+                                lfc = 1,
+                                
+                                dir_fc = "Depleted",
+                                
+                                p.val = 0.05,
+                                
+                                cel_type="cMon",
+                                var_column = "disease_short",
+                                comparison="between_nhoo",
+                                covariable.dataset = FALSE, hvgs = TRUE)
+
+```
+
+#### Activated cMon and cMon together
+
+```{r}
+
+cMon_deg = disease_nhoo_program(test_adata=test_adata_,
+                                
+                                lfc = 1,
+                                
+                                dir_fc = "Enriched",
+                                
+                                p.val = 0.05,
+                                
+                                cel_type=c("Activated cMon", "cMon"),
+                                var_column = "disease_short",
+                                comparison="selected_nhoo", hvgs = TRUE)
+
+
+
+cMon_deg_dis_ctrl = disease_nhoo_program(test_adata=test_adata_,
+                                
+                                lfc = 1,
+                                
+                                dir_fc = "Enriched",
+                                
+                                p.val = 0.05,
+                                
+                                cel_type=c("Activated cMon", "cMon"),
+                                var_column = "disease_short",
+                                comparison="dis_vs_ctrl", hvgs = TRUE)
+
+
+cMon_deg_dis_nhoo = disease_nhoo_program(test_adata=test_adata_,
+                                
+                                lfc = 1,
+                                
+                                dir_fc = "Enriched",
+                                
+                                p.val = 0.05,
+                                
+                                cel_type=c("Activated cMon", "cMon"),
+                                var_column = "disease_short",
+                                comparison="between_nhoo", hvgs = TRUE)
+
+```
+
+##### SLE
+
+```{r}
+cMon_SLE_deg = disease_nhoo_program(test_adata=test_adata_[,test_adata_$dataset_id=="Perez_2022"],
+                                
+                                lfc = 1,
+                                
+                                dir_fc = "Enriched",
+                                
+                                p.val = 0.05,
+                                
+                                cel_type=c("Activated cMon", "cMon"),
+                                var_column = "disease_short",
+                                comparison="selected_nhoo",
+                                covariable.dataset = FALSE, hvgs = TRUE)
+
+
+
+cMon_SLE_deg_dis_ctrl = disease_nhoo_program(test_adata=test_adata_[,test_adata_$dataset_id=="Perez_2022"],
+                                
+                                lfc = 1,
+                                
+                                dir_fc = "Enriched",
+                                
+                                p.val = 0.05,
+                                
+                                cel_type=c("Activated cMon", "cMon"),
+                                var_column = "disease_short",
+                                comparison="dis_vs_ctrl",
+                                covariable.dataset = FALSE, hvgs = TRUE)
+
+
+cMon_SLE_deg_dis_nhoo = disease_nhoo_program(test_adata=test_adata_[,test_adata_$dataset_id=="Perez_2022"],
+                                
+                                lfc = 1,
+                                
+                                dir_fc = "Enriched",
+                                
+                                p.val = 0.05,
+                                
+                                cel_type=c("Activated cMon", "cMon"),
+                                var_column = "disease_short",
+                                comparison="between_nhoo",
+                                covariable.dataset = FALSE, hvgs = TRUE)
+
+```
+
+```{r}
+table(test_adata_$disease_short, test_adata_$dataset_id)
+```
+
+##### Sjo_syndr
+
+```{r}
+cMon_Sjo_syndr_deg = disease_nhoo_program(test_adata=test_adata_[,test_adata_$dataset_id=="GSE157278_Hong_2020"],
+                                
+                                lfc = 1,
+                                
+                                dir_fc = "Enriched",
+                                
+                                p.val = 0.05,
+                                
+                                cel_type=c("Activated cMon", "cMon"),
+                                var_column = "disease_short",
+                                comparison="selected_nhoo",
+                                covariable.dataset = FALSE, hvgs = TRUE)
+
+
+
+cMon_Sjo_syndr_deg_dis_ctrl = disease_nhoo_program(test_adata=test_adata_[,test_adata_$dataset_id=="GSE157278_Hong_2020"],
+                                
+                                lfc = 1,
+                                
+                                dir_fc = "Enriched",
+                                
+                                p.val = 0.05,
+                                
+                                cel_type=c("Activated cMon", "cMon"),
+                                var_column = "disease_short",
+                                comparison="dis_vs_ctrl",
+                                covariable.dataset = FALSE, hvgs = TRUE)
+
+
+cMon_Sjo_syndr_deg_dis_nhoo = disease_nhoo_program(test_adata=test_adata_[,test_adata_$dataset_id=="GSE157278_Hong_2020"],
+                                
+                                lfc = 1,
+                                
+                                dir_fc = "Enriched",
+                                
+                                p.val = 0.05,
+                                
+                                cel_type=c("Activated cMon", "cMon"),
+                                var_column = "disease_short",
+                                comparison="between_nhoo",
+                                covariable.dataset = FALSE, hvgs = TRUE)
+
+```
+
+```{r}
+table(test_adata_$disease_short, test_adata_$dataset_id)
+```
+
+##### Spondoarthritis
+
+```{r}
+cMon_Spondoarthritis_deg = disease_nhoo_program(test_adata=test_adata_[,test_adata_$dataset_id=="GSE163314_Lefferts_2021" & test_adata_$disease_short %in% c("all_spondoarthritis", "Healthy")],
+                                
+                                lfc = 1,
+                                
+                                dir_fc = "Enriched",
+                                
+                                p.val = 0.05,
+                                
+                                cel_type=c("Activated cMon", "cMon"),
+                                var_column = "disease_short",
+                                comparison="selected_nhoo",
+                                covariable.dataset = FALSE, hvgs = TRUE)
+
+
+
+cMon_Spondoarthritis_deg_dis_ctrl = disease_nhoo_program(test_adata=test_adata_[,test_adata_$dataset_id=="GSE163314_Lefferts_2021" & test_adata_$disease_short %in% c("all_spondoarthritis", "Healthy")],
+                                
+                                lfc = 1,
+                                
+                                dir_fc = "Enriched",
+                                
+                                p.val = 0.05,
+                                
+                                cel_type=c("Activated cMon", "cMon"),
+                                var_column = "disease_short",
+                                comparison="dis_vs_ctrl",
+                                covariable.dataset = FALSE, hvgs = TRUE)
+
+
+cMon_Spondoarthritis_deg_dis_nhoo = disease_nhoo_program(test_adata=test_adata_[,test_adata_$dataset_id=="GSE163314_Lefferts_2021" & test_adata_$disease_short %in% c("all_spondoarthritis", "Healthy")],
+                                
+                                lfc = 1,
+                                
+                                dir_fc = "Enriched",
+                                
+                                p.val = 0.05,
+                                
+                                cel_type=c("Activated cMon", "cMon"),
+                                var_column = "disease_short",
+                                comparison="between_nhoo",
+                                covariable.dataset = FALSE, hvgs = TRUE)
+
+```
+
+```{r}
+table(test_adata_$disease_short, test_adata_$dataset_id)
+```
+
+##### CD
+
+```{r}
+cMon_CD_deg = disease_nhoo_program(test_adata=test_adata_[,test_adata_$dataset_id=="GSE163314_Lefferts_2021" & test_adata_$disease_short %in% c("all_CD", "Healthy")],
+                                
+                                lfc = 1,
+                                
+                                dir_fc = "Enriched",
+                                
+                                p.val = 0.05,
+                                
+                                cel_type=c("Activated cMon", "cMon"),
+                                var_column = "disease_short",
+                                comparison="selected_nhoo",
+                                covariable.dataset = F, hvgs = TRUE)
+
+
+
+cMon_CD_deg_dis_ctrl = disease_nhoo_program(test_adata=test_adata_[,test_adata_$dataset_id=="GSE163314_Lefferts_2021" & test_adata_$disease_short %in% c("all_CD", "Healthy")],
+                                
+                                lfc = 1,
+                                
+                                dir_fc = "Enriched",
+                                
+                                p.val = 0.05,
+                                
+                                cel_type=c("Activated cMon", "cMon"),
+                                var_column = "disease_short",
+                                comparison="dis_vs_ctrl",
+                                covariable.dataset = F, hvgs = TRUE)
+
+
+cMon_CD_deg_dis_nhoo = disease_nhoo_program(test_adata=test_adata_[,test_adata_$dataset_id=="GSE163314_Lefferts_2021" & 
+                                                                       
+                                                                       test_adata_$disease_short %in% c("all_CD", "Healthy")],
+                                
+                                lfc = 1,
+                                
+                                dir_fc = "Enriched",
+                                
+                                p.val = 0.05,
+                                
+                                cel_type=c("Activated cMon", "cMon"),
+                                var_column = "disease_short",
+                                comparison="between_nhoo",
+                                covariable.dataset = F, hvgs = TRUE)
+
+```
+
+```{r}
+table(test_adata_$disease_short, test_adata_$dataset_id)
+```
+
+##### Hashimoto
+
+```{r}
+cMon_hashimoto_deg = disease_nhoo_program(test_adata=test_adata_[,test_adata_$disease_short %in% c("all_hashimoto", "Healthy")],
+                                
+                                lfc = 1,
+                                
+                                dir_fc = "Enriched",
+                                
+                                
+                                p.val = 0.05,
+                                
+                                cel_type=c("Activated cMon", "cMon"),
+                                var_column = "disease_short",
+                                comparison="selected_nhoo",
+                                covariable.dataset = FALSE, hvgs = TRUE)
+
+
+
+cMon_hashimoto_deg_dis_ctrl = disease_nhoo_program(test_adata=test_adata_[,test_adata_$disease_short %in% c("all_hashimoto", "Healthy")],
+                                
+                                lfc = 1,
+                                
+                                dir_fc = "Enriched",
+                                
+                                p.val = 0.05,
+                                
+                                cel_type=c("Activated cMon", "cMon"),
+                                var_column = "disease_short",
+                                comparison="dis_vs_ctrl",
+                                covariable.dataset = FALSE, hvgs = TRUE)
+
+
+cMon_hashimoto_deg_dis_nhoo = disease_nhoo_program(test_adata=test_adata_[,test_adata_$disease_short %in% c("all_hashimoto", "Healthy")],
+                                
+                                lfc = 1,
+                                
+                                dir_fc = "Enriched",
+                                
+                                p.val = 0.05,
+                                
+                                cel_type=c("Activated cMon", "cMon"),
+                                var_column = "disease_short",
+                                comparison="between_nhoo",
+                                covariable.dataset = FALSE, hvgs = TRUE)
+
+```
+
+#### Non_CMon
+
+```{r}
+
+levels(test_adata_$Cell_type_scANVI)
+```
+
+```{r}
+test_adata_$nhoo = case_when(test_adata_$nhoo_test_condition=="Enriched" ~ "Enriched",
+                                            TRUE ~ "Rest") %>% as.factor()
+
+table(test_adata_$disease_short, test_adata_$dataset_id)
+
+
+test_adata_$disease_nhoo = paste0(test_adata_$disease_short, "_", test_adata_$nhoo_test_condition) %>% as.factor()
+
+table(test_adata_$disease_nhoo, test_adata_$Cell_type_scANVI)
+
+```
+
+```{r}
+test_adata_$dataset_id %>% unique()
+```
+
+```{r}
+
+
+Non_cMon_enriched_deg = disease_nhoo_program(test_adata=test_adata_,
+                                
+                                lfc = 1,
+                                
+                                dir_fc = "Enriched",
+                                
+                                p.val = 0.05,
+                                
+                                cel_type="Non_cMon",
+                                var_column = "disease_short",
+                                comparison="selected_nhoo", hvgs = TRUE)
+
+
+
+Non_cMon_enriched_deg_dis_ctrl = disease_nhoo_program(test_adata=test_adata_,
+                                
+                                lfc = 1,
+                                
+                                dir_fc = "Enriched",
+                                
+                                p.val = 0.05,
+                                
+                                cel_type="Non_cMon",
+                                var_column = "disease_short",
+                                comparison="dis_vs_ctrl", hvgs = TRUE)
+
+
+Non_cMon_enriched_deg_dis_nhoo = disease_nhoo_program(test_adata=test_adata_,
+                                
+                                lfc = 1,
+                                
+                                dir_fc = "Enriched",
+                                
+                                p.val = 0.05,
+                                
+                                cel_type="Non_cMon",
+                                var_column = "disease_short",
+                                comparison="between_nhoo", hvgs = TRUE)
+
+```
+
+##### SLE
+
+```{r}
+
+# Non_cMon_SLE_deg = disease_nhoo_program(test_adata=test_adata_[,test_adata_$dataset_id=="Perez_2022"],
+#                                 
+#                                 lfc = 1,
+#                                 
+#                                 dir_fc = "Enriched",
+#                                 
+#                                 p.val = 0.05,
+#                                 
+#                                 cel_type="Non_CMon",
+#                                 var_column = "disease_short",
+#                                 comparison="selected_nhoo",
+#                                 covariable.dataset = FALSE, hvgs = TRUE)
+# 
+# 
+# 
+# Non_cMon_SLE_deg_dis_ctrl = disease_nhoo_program(test_adata=test_adata_[,test_adata_$dataset_id=="Perez_2022"],
+#                                 
+#                                 lfc = 1,
+#                                 
+#                                 dir_fc = "Enriched",
+#                                 
+#                                 p.val = 0.05,
+#                                 
+#                                 cel_type="Non_CMon",
+#                                 var_column = "disease_short",
+#                                 comparison="dis_vs_ctrl",
+#                                 covariable.dataset = FALSE, hvgs = TRUE)
+# 
+# 
+# Non_cMon_SLE_deg_dis_nhoo = disease_nhoo_program(test_adata=test_adata_[,test_adata_$dataset_id=="Perez_2022"],
+#                                 
+#                                 lfc = 1,
+#                                 
+#                                 dir_fc = "Enriched",
+#                                 
+#                                 p.val = 0.05,
+#                                 
+#                                 cel_type="Non_CMon",
+#                                 var_column = "disease_short",
+#                                 comparison="between_nhoo",
+#                                 covariable.dataset = FALSE, hvgs = TRUE)
+
+```
+
+```{r}
+table(test_adata_$disease_short, test_adata_$dataset_id)
+```
+
+##### Sjo_syndr
+
+```{r}
+# Non_cMon_Sjo_syndr_deg = disease_nhoo_program(test_adata=test_adata_[,test_adata_$dataset_id=="GSE157278_Hong_2020"],
+#                                 
+#                                 lfc = 1,
+#                                 
+#                                 dir_fc = "Enriched",
+#                                 
+#                                 p.val = 0.05,
+#                                 
+#                                 cel_type="Non_CMon",
+#                                 var_column = "disease_short",
+#                                 comparison="selected_nhoo",
+#                                 covariable.dataset = FALSE, hvgs = TRUE)
+# 
+# 
+# 
+# Non_cMon_Sjo_syndr_deg_dis_ctrl = disease_nhoo_program(test_adata=test_adata_[,test_adata_$dataset_id=="GSE157278_Hong_2020"],
+#                                 
+#                                 lfc = 1,
+#                                 
+#                                 dir_fc = "Enriched",
+#                                 
+#                                 p.val = 0.05,
+#                                 
+#                                 cel_type="Non_CMon",
+#                                 var_column = "disease_short",
+#                                 comparison="dis_vs_ctrl",
+#                                 covariable.dataset = FALSE, hvgs = TRUE)
+# 
+# 
+# Non_cMon_Sjo_syndr_deg_dis_nhoo = disease_nhoo_program(test_adata=test_adata_[,test_adata_$dataset_id=="GSE157278_Hong_2020"],
+#                                 
+#                                 lfc = 1,
+#                                 
+#                                 dir_fc = "Enriched",
+#                                 
+#                                 p.val = 0.05,
+#                                 
+#                                 cel_type="Non_CMon",
+#                                 var_column = "disease_short",
+#                                 comparison="between_nhoo",
+#                                 covariable.dataset = FALSE, hvgs = TRUE)
+
+```
+
+```{r}
+table(test_adata_$disease_short, test_adata_$dataset_id)
+```
+
+##### Spondoarthritis
+
+```{r}
+# Non_cMon_Spondoarthritis_deg = disease_nhoo_program(test_adata=test_adata_[,test_adata_$dataset_id=="GSE163314_Lefferts_2021" & test_adata_$disease_short %in% c("all_spondoarthritis", "Healthy")],
+#                                 
+#                                 lfc = 1,
+#                                 
+#                                 dir_fc = "Enriched",
+#                                 
+#                                 p.val = 0.05,
+#                                 
+#                                 cel_type="Non_CMon",
+#                                 var_column = "disease_short",
+#                                 comparison="selected_nhoo",
+#                                 covariable.dataset = FALSE, hvgs = TRUE)
+# 
+# 
+# 
+# Non_cMon_Spondoarthritis_deg_dis_ctrl = disease_nhoo_program(test_adata=test_adata_[,test_adata_$dataset_id=="GSE163314_Lefferts_2021" & test_adata_$disease_short %in% c("all_spondoarthritis", "Healthy")],
+#                                 
+#                                 lfc = 1,
+#                                 
+#                                 dir_fc = "Enriched",
+#                                 
+#                                 p.val = 0.05,
+#                                 
+#                                 cel_type="Non_CMon",
+#                                 var_column = "disease_short",
+#                                 comparison="dis_vs_ctrl",
+#                                 covariable.dataset = FALSE, hvgs = TRUE)
+# 
+# 
+# Non_cMon_Spondoarthritis_deg_dis_nhoo = disease_nhoo_program(test_adata=test_adata_[,test_adata_$dataset_id=="GSE163314_Lefferts_2021" & test_adata_$disease_short %in% c("all_spondoarthritis", "Healthy")],
+#                                 
+#                                 lfc = 1,
+#                                 
+#                                 dir_fc = "Enriched",
+#                                 
+#                                 p.val = 0.05,
+#                                 
+#                                 cel_type="Non_CMon",
+#                                 var_column = "disease_short",
+#                                 comparison="between_nhoo",
+#                                 covariable.dataset = FALSE, hvgs = TRUE)
+
+```
+
+```{r}
+table(test_adata_$disease_short, test_adata_$dataset_id)
+```
+
+##### CD
+
+```{r}
+# Non_cMon_CD_deg = disease_nhoo_program(test_adata=test_adata_[,test_adata_$dataset_id=="GSE163314_Lefferts_2021" & test_adata_$disease_short %in% c("all_CD", "Healthy")],
+#                                 
+#                                 lfc = 1,
+#                                 
+#                                 dir_fc = "Enriched",
+#                                 
+#                                 p.val = 0.05,
+#                                 
+#                                 cel_type="Non_CMon",
+#                                 var_column = "disease_short",
+#                                 comparison="selected_nhoo",
+#                                 covariable.dataset = F, hvgs = TRUE)
+# 
+# 
+# 
+# Non_cMon_CD_deg_dis_ctrl = disease_nhoo_program(test_adata=test_adata_[,test_adata_$dataset_id=="GSE163314_Lefferts_2021" & test_adata_$disease_short %in% c("all_CD", "Healthy")],
+#                                 
+#                                 lfc = 1,
+#                                 
+#                                 dir_fc = "Enriched",
+#                                 
+#                                 p.val = 0.05,
+#                                 
+#                                 cel_type="Non_CMon",
+#                                 var_column = "disease_short",
+#                                 comparison="dis_vs_ctrl",
+#                                 covariable.dataset = F, hvgs = TRUE)
+# 
+# 
+# Non_cMon_CD_deg_dis_nhoo = disease_nhoo_program(test_adata=test_adata_[,test_adata_$dataset_id=="GSE163314_Lefferts_2021" & 
+#                                                                        
+#                                                                        test_adata_$disease_short %in% c("all_CD", "Healthy")],
+#                                 
+#                                 lfc = 1,
+#                                 
+#                                 dir_fc = "Enriched",
+#                                 
+#                                 p.val = 0.05,
+#                                 
+#                                 cel_type="Non_CMon",
+#                                 var_column = "disease_short",
+#                                 comparison="between_nhoo",
+#                                 covariable.dataset = F, hvgs = TRUE)
+
+```
+
+```{r}
+table(test_adata_$disease_short, test_adata_$dataset_id)
+```
+
+##### Hashimoto
+
+```{r}
+# Non_cMon_hashimoto_deg = disease_nhoo_program(test_adata=test_adata_[,test_adata_$disease_short %in% c("all_hashimoto", "Healthy")],
+#                                 
+#                                 lfc = 1,
+#                                 
+#                                 dir_fc = "Enriched",
+#                                 
+#                                 p.val = 0.05,
+#                                 
+#                                 cel_type="Non_CMon",
+#                                 var_column = "disease_short",
+#                                 comparison="selected_nhoo",
+#                                 covariable.dataset = FALSE, hvgs = TRUE)
+# 
+# 
+# 
+# Non_cMon_hashimoto_deg_dis_ctrl = disease_nhoo_program(test_adata=test_adata_[,test_adata_$disease_short %in% c("all_hashimoto", "Healthy")],
+#                                 
+#                                 lfc = 1,
+#                                 
+#                                 dir_fc = "Enriched",
+#                                 
+#                                 p.val = 0.05,
+#                                 
+#                                 cel_type="Non_CMon",
+#                                 var_column = "disease_short",
+#                                 comparison="dis_vs_ctrl",
+#                                 covariable.dataset = FALSE, hvgs = TRUE)
+# 
+# 
+# Non_cMon_hashimoto_deg_dis_nhoo = disease_nhoo_program(test_adata=test_adata_[,test_adata_$disease_short %in% c("all_hashimoto", "Healthy")],
+#                                 
+#                                 lfc = 1,
+#                                 
+#                                 dir_fc = "Enriched",
+#                                 
+#                                 p.val = 0.05,
+#                                 
+#                                 cel_type="Non_CMon",
+#                                 var_column = "disease_short",
+#                                 comparison="between_nhoo",
+#                                 covariable.dataset = FALSE, hvgs = TRUE)
+
+```
+
+#### enriched_vs_depleted
+
+##### ALL disease
+
+```{r}
+
+
+cMon_1_enriched_disease = disease_nhoo_program(test_adata=test_adata_,
+                                
+                                lfc = 1,
+                                
+                                dir_fc = "Enriched",
+                                
+                                p.val = 0.05,
+                                
+                                cel_type="Activated cMon",
+                                var_column = "disease_short",
+                                comparison = "enriched_vs_depleted",
+                                covariable.dataset=T, hvgs = T)
+
+
+cMon_2_depleted_disease = disease_nhoo_program(test_adata=test_adata_,
+                                
+                                lfc = 1,
+                                
+                                dir_fc = "Depleted",
+                                
+                                p.val = 0.05,
+                                
+                                cel_type="cMon",
+                                var_column = "disease_short",
+                                comparison = "enriched_vs_depleted",
+                                covariable.dataset=T, hvgs = T)
+
+
+# Non_cMon_enriched_disease = disease_nhoo_program(test_adata=test_adata_,
+#                                 
+#                                 lfc = 1,
+#                                 
+#                                 dir_fc = "Enriched",
+#                                 
+#                                 p.val = 0.05,
+#                                 
+#                                 cel_type="Non-CMon",
+#                                 var_column = "disease_short",
+#                                 comparison = "enriched_vs_depleted",
+#                                 covariable.dataset=T, hvgs = T)
+
+
+
+```
+
+```{r}
+cMon_1_enriched_disease %>% filter(abs(lfc) < 20, abs(lfc_dis_enriched) < 20) %>% 
+  ggplot(aes(x=lfc, y=lfc_dis_enriched)) +
+  geom_point()
+```
+
+```{r}
+cor.test(cMon_1_enriched_disease$lfc, cMon_1_enriched_disease$lfc_dis_enriched)
+```
+
+```{r}
+cMon_1_enriched_disease = cMon_1_enriched_disease %>% filter(dirFC_dis_enriched != "NS") %>% filter(dirFC_rest_dis_depleted != dirFC_dis_enriched) %>% arrange(desc(lfc_dis_enriched))
+```
+
+```{r}
+cMon_2_depleted_disease %>% filter(abs(lfc) < 20, abs(lfc_dis_enriched) < 20) %>% 
+  ggplot(aes(x=lfc, y=lfc_dis_enriched)) +
+  geom_point()
+```
+
+```{r}
+cor.test(cMon_2_depleted_disease$lfc, cMon_2_depleted_disease$lfc_dis_enriched)
+```
+
+```{r}
+
+cMon_2_depleted_disease %>% filter(abs(lfc) < 20, abs(lfc_dis_enriched) < 20) %>% 
+  ggplot(aes(x=lfc, y=lfc_dis_enriched)) +
+  geom_point()
+```
+
+### Comparison c_Mon_1 vs c_Mon_2 (only in disease)
+
+```{r}
+
+table(test_adata_$Cell_type_scANVI, test_adata_$disease_short)
+```
+
+```{r}
+test_adata_$dataset_disease = paste0(test_adata_$dataset_id, "_", test_adata_$disease_short) %>% as.factor()
+
+#table(test_adata_$dataset_disease)
+```
+
+```{r}
+test_adata_$cell_disease_nhoo = paste0(test_adata_$Cell_type_scANVI, "_", test_adata_$disease_nhoo) %>% as.factor()
+
+table(test_adata_$cell_disease_nhoo)
+```
+
+#### All
+
+```{r}
+
+test_adata_$disease_bin = ifelse(test_adata_$disease_short=="Healthy", "Healthy", "Disease") %>% factor(levels = c("Healthy", "Disease"))
+  
+  
+test_adata_$Cell_disease_bin = paste0(test_adata_$Cell_type_scANVI, "_", test_adata_$disease_bin)
+
+All_cMon_2_vs_cMon_1 = run_deg(
+  test_adata = test_adata_,
+  lfc = 1,
+  p.val = 0.05,
+  cel_type = c("cMon", "Activated cMon"),
+  test_col="Cell_disease_bin",
+  ctrl=c("cMon_1_Healthy", "cMon_2_Disease", "cMon_2_Healthy"),
+  var_column = "disease_short",
+  var.included = c("all_CD", "all_SLE", "all_hashimoto", "all_sjo_syndr", "all_spondoarthritis", "Healthy"),
+  covariable.dataset = TRUE,
+  covar = "dataset_disease"
+)
+
+
+All_cMon_2_vs_cMon_1 = All_cMon_2_vs_cMon_1 %>% arrange(desc(AUC))
+
+```
+
+```{r}
+
+All_cMon_2_vs_cMon_1_healthy = run_deg(
+  test_adata = test_adata_,
+  lfc = 1,
+  p.val = 0.05,
+  cel_type = c("cMon", "Activated cMon"),
+  test_col="Cell_type_scANVI",
+  ctrl=c("cMon"),
+  var_column = "disease_short",
+  var.included = c("Healthy"),
+  covariable.dataset = TRUE,
+  covar = "dataset_id"
+)
+
+All_cMon_2_vs_cMon_1_disease = run_deg(
+  test_adata = test_adata_,
+  lfc = 1,
+  p.val = 0.05,
+  cel_type = c("cMon", "Activated cMon"),
+  test_col="Cell_type_scANVI",
+  ctrl=c("cMon"),
+  var_column = "disease_short",
+  var.included = c("all_CD", "all_SLE", "all_hashimoto", "all_sjo_syndr", "all_spondoarthritis"),
+  covariable.dataset = T,
+  covar = "dataset_id"
+)
+
+
+cMon_1_vs_cMon_2 = setdiff(paste0(All_cMon_2_vs_cMon_1_disease$name[All_cMon_2_vs_cMon_1_disease$AUC>=0.7], "_", All_cMon_2_vs_cMon_1_disease$dirFC[All_cMon_2_vs_cMon_1_disease$AUC>=0.7]),
+        paste0(All_cMon_2_vs_cMon_1_healthy$name[All_cMon_2_vs_cMon_1_healthy$AUC>=0.7], "_", All_cMon_2_vs_cMon_1_healthy$dirFC[All_cMon_2_vs_cMon_1_healthy$AUC>=0.7])) %>% str_remove(., "_.*")
+
+
+cMon_1_vs_cMon_2
+
+```
+
+```{r fig.width=15, fig.height=7}
+levels(test_adata_$Cell_type_scANVI)
+levels(test_adata_$disease_short)
+All_cMon_2_vs_cMon_1_disease = All_cMon_2_vs_cMon_1_disease %>% arrange(desc(AUC))
+
+test_adata = test_adata_[, test_adata_$Cell_type_scANVI %in% c("Activated cMon", "cMon") & test_adata_$disease_short == "all_CD"]
+
+#test_adata$disease_bin = ifelse(test_adata$disease_short == "Remission_RA", "Remission_RA", "Naïve_treat_RA") %>% as.factor()
+
+
+plot_violin_facet(
+  sce = test_adata,
+  gene = c("ICAM2", "CD44", "ITGAL", "ITGAM", "CCR1", "CCR2", "S100A8", "S100A9"),
+  xlab = "",
+  ylab = "",
+  size = 3,
+  shape = 20,
+  cell_type = c("Activated cMon", "cMon"),
+  gg_x = "Cell_type_scANVI",
+  angle = 90,
+  colmap = vega_20,
+  base_size = 14,
+  base_line_size = 0.5,
+  base_family = "sans",
+  base_fontface = "bold",
+  legend.title = "Groups",
+  strip.colour = "transparent",
+  strip.fill = "transparent",
+  plot.title.position = "plot",
+  plot.title = "",
+  legend.position = "right",
+  ncol = 6,
+  show.x.text = FALSE,
+  figure_Path,
+  fig.width = 8,
+  fig.height = 3,
+  save = F,
+  stat = T,
+  stat.ref = "cMon",
+  stat.method = "t.test",
+  stat.paired = FALSE,
+  label.y = NULL,
+  violin = T,
+  scale.data = F,
+  include_violin_boxplot = T,
+  violin_boxplot_w = 0.1
+)
+
+
+```
+
+##### GSEA
+
+```{r}
+All_cMon_2_vs_cMon_1_2 = All_cMon_2_vs_cMon_1_disease[,c(1,7,9)] %>% arrange(desc(AUC))
+
+#colnames(All_cMon_2_vs_cMon_1_2) = NULL
+
+#rownames(All_cMon_2_vs_cMon_1_2) = NULL
+
+write.csv(x = as.data.frame(All_cMon_2_vs_cMon_1_2)[,1:2], file = "G:/My Drive/Projects/SCVI_Results/Immune_compartment_PBMC/Subset_Agosto_2023/GSEA/All_cMon_2_vs_cMon_1.tsv",
+          row.names = F)
+```
+
+```{r}
+table(test_adata_$dataset_id, test_adata_$disease_short)
+```
+
+#### CD
+
+```{r}
+
+IBD_cMon_2_vs_cMon_1 = run_deg(
+  test_adata = test_adata_,
+  lfc = 1,
+  p.val = 0.05,
+  cel_type = c("cMon", "Activated cMon"),
+  test_col="Cell_type_scANVI",
+  ctrl=c("cMon"),
+  var_column = "disease_short",
+  var.included = c("all_CD"),
+  covariable.dataset = F,
+  covar = "dataset_id"
+)
+
+
+```
+
+#### SLE
+
+```{r}
+
+SLE_cMon_2_vs_cMon_1 = run_deg(
+  test_adata = test_adata_,
+  lfc = 1,
+  p.val = 0.05,
+  cel_type = c("cMon", "Activated cMon"),
+  test_col="Cell_type_scANVI",
+  ctrl=c("cMon"),
+  var_column = "disease_short",
+  var.included = c("all_SLE"),
+  covariable.dataset = F,
+  covar = "dataset_id"
+)
+
+
+```
+
+#### hashimoto
+
+```{r}
+
+Hashimoto_cMon_2_vs_cMon_1 = run_deg(
+  test_adata = test_adata_,
+  lfc = 1,
+  p.val = 0.05,
+  cel_type = c("cMon", "Activated cMon"),
+  test_col="Cell_type_scANVI",
+  ctrl=c("cMon"),
+  var_column = "disease_short",
+  var.included = c("all_hashimoto"),
+  covariable.dataset = F,
+  covar = "dataset_id"
+)
+
+
+```
+
+#### Sjo_syndr
+
+```{r}
+
+sjo_syndr_cMon_2_vs_cMon_1 = run_deg(
+  test_adata = test_adata_,
+  lfc = 1,
+  p.val = 0.05,
+  cel_type = c("cMon", "Activated cMon"),
+  test_col="Cell_type_scANVI",
+  ctrl=c("cMon"),
+  var_column = "disease_short",
+  var.included = c("all_sjo_syndr"),
+  covariable.dataset = F,
+  covar = "dataset_id"
+)
+
+
+```
+
+#### all_spondoarthritis
+
+```{r}
+
+spondoarthritis_cMon_2_vs_cMon_1 = run_deg(
+  test_adata = test_adata_,
+  lfc = 1,
+  p.val = 0.05,
+  cel_type = c("cMon", "Activated cMon"),
+  test_col="Cell_type_scANVI",
+  ctrl=c("cMon"),
+  var_column = "disease_short",
+  var.included = c("all_spondoarthritis"),
+  covariable.dataset = F,
+  covar = "dataset_id"
+)
+
+
+```
+
+##### Common cMon1_vs_cMon2
+
+```{r}
+rownames(All_cMon_2_vs_cMon_1) = paste0(All_cMon_2_vs_cMon_1$name, "_", All_cMon_2_vs_cMon_1$dirFC)
+
+rownames(IBD_cMon_2_vs_cMon_1) = paste0(IBD_cMon_2_vs_cMon_1$name, "_", IBD_cMon_2_vs_cMon_1$dirFC)
+
+rownames(Hashimoto_cMon_2_vs_cMon_1) = paste0(Hashimoto_cMon_2_vs_cMon_1$name, "_", Hashimoto_cMon_2_vs_cMon_1$dirFC)
+
+rownames(sjo_syndr_cMon_2_vs_cMon_1) = paste0(sjo_syndr_cMon_2_vs_cMon_1$name, "_", sjo_syndr_cMon_2_vs_cMon_1$dirFC)
+
+
+rownames(spondoarthritis_cMon_2_vs_cMon_1) = paste0(spondoarthritis_cMon_2_vs_cMon_1$name, "_", spondoarthritis_cMon_2_vs_cMon_1$dirFC)
+
+rownames(SLE_cMon_2_vs_cMon_1) = paste0(SLE_cMon_2_vs_cMon_1$name, "_", SLE_cMon_2_vs_cMon_1$dirFC)
+
+#intersect of DEG
+
+common_deg_cMon_1_vs_cMon_2 = base::Reduce(intersect, list(rownames(IBD_cMon_2_vs_cMon_1),
+                             rownames(Hashimoto_cMon_2_vs_cMon_1),
+                             rownames(sjo_syndr_cMon_2_vs_cMon_1),
+                             rownames(spondoarthritis_cMon_2_vs_cMon_1),
+                             rownames(SLE_cMon_2_vs_cMon_1)))
+
+rownames(All_cMon_2_vs_cMon_1_disease) = paste0(All_cMon_2_vs_cMon_1_disease$name, "_", All_cMon_2_vs_cMon_1_disease$dirFC)
+
+commoncMon_1_vs_cMon_2 = intersect(common_deg_cMon_1_vs_cMon_2, rownames(All_cMon_2_vs_cMon_1_disease)) %>% str_remove(., "_.*")
+
+
+commoncMon_1_vs_cMon_2 = as.data.frame(All_cMon_2_vs_cMon_1_disease[All_cMon_2_vs_cMon_1_disease$name%in%commoncMon_1_vs_cMon_2,]) 
+```
+
+##### GSEA results
+
+```{r}
+gsea_KEGG_2021_Human = read.csv("G:/My Drive/Projects/SCVI_Results/Immune_compartment_PBMC/Subset_Agosto_2023/GSEA/GSEA_CMon1_vs_cMon_2_KEGG_2021_Human.csv")
+```
+
+```{r}
+gsea_GO_Biological_Process_2023 = read.csv("G:/My Drive/Projects/SCVI_Results/Immune_compartment_PBMC/Subset_Agosto_2023/GSEA/GSEA_CMon1_vs_cMon_2_GO_Biological_Process_2023.csv")
+```
+
+```{r}
+gsea_MSigDB_Hallmark_2020 = read.csv("C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/sanger_gdrive/Projects/SCVI_Results/Immune_compartment_PBMC/Subset_Agosto_2023/GSEA/GSEA_CMon1_vs_cMon_2_MSigDB_Hallmark_2020.csv")
+```
+
+```{r}
+gsea_MSigDB_Reactome_2022 = read.csv("G:/My Drive/Projects/SCVI_Results/Immune_compartment_PBMC/Subset_Agosto_2023/GSEA/GSEA_CMon1_vs_cMon_2_Reactome_2022.csv")
+```
+
+```{r}
+gsea_MSigDB_WikiPathway_2021_Human = read.csv("G:/My Drive/Projects/SCVI_Results/Immune_compartment_PBMC/Subset_Agosto_2023/GSEA/GSEA_CMon1_vs_cMon_2_WikiPathway_2021_Human.csv")
+```
+
+##### Heatmap
+
+```{r fig.width=11, fig.height=18}
+#| fig-width: 25
+#| fig-height: 100
+
+
+cel_nh = levels(test_adata_$Cell_type_scANVI)
+
+
+n_top = 25
+
+test_adata_sub = test_adata_[, test_adata_$Cell_type_scANVI %in% c("Activated cMon", "cMon")]
+
+#test_adata_sub = test_adata_[, test_adata_$Cell_type_scANVI %in% c("Intermediate_macrophage", "Mac_MERTK_hi_TREM2_low", "Mac_NUPR1_TREM2_hi", #"Mac_S100A8_prod", "Mo_Mac_CX3CR1", "Mo_Mac_LYVE1_plus")]
+
+test_adata_prep = prep_de_data(depl_ = "", enrch_ = "", test_adata = test_adata_sub, nhood = FALSE, hvgs = FALSE, cel_of_int_vs_rest = T, cell_type = "Activated cMon")
+
+#cel_cleaned = cel %% str_replace_all("_plus", "+")
+#cel_cleaned = str_glue("Depleted {cel_cleaned}")
+
+rownames(cMon_1_deg_dis_ctrl) = paste0(cMon_1_deg_dis_ctrl$name, "_", cMon_1_deg_dis_ctrl$dirFC)
+
+rownames(cMon_2_deg_dis_ctrl) = paste0(cMon_2_deg_dis_ctrl$name, "_", cMon_2_deg_dis_ctrl$dirFC)
+
+
+cMon1 = cMon_1_deg_dis_ctrl[rownames(cMon_1_deg_dis_ctrl) %in% rownames(cMon_2_CD_deg_dis_ctrl),]
+
+test_adata_prep$disease_short = test_adata_prep$disease_short %>% 
+  str_replace(., "CD", "IBD") %>% str_remove(., "all_") %>% 
+  str_to_sentence() %>% str_replace(., "Sle", "SLE") %>% str_replace(., "Ibd", "IBD") %>% as.factor()
+  
+plot_heatmap_wout_bar(
+  test_adata = test_adata_prep[,test_adata_prep$disease_short!="Healthy"],
+  cel.selected = "Activated cMon",
+  selected_gene = unique(c(str_split_1(gsea_MSigDB_Hallmark_2020$leading_edge[1], pattern = ","),
+                    str_split_1(gsea_MSigDB_Hallmark_2020$leading_edge[2], pattern = ","))),
+  n_top = 15,
+  aggregate = TRUE,
+  show_column_names = TRUE,
+  aggr_fun = "mean",
+  col_pal = vega_20,
+  test.column = "Cell_type_scANVI",
+  column.label = "disease_short",
+  col_test = c("grey", "grey50"),
+  scale = TRUE,
+  remove_inf = TRUE,
+  cluster.col = F,
+  cluster.row = T,
+  labels_annot_bar = TRUE,
+  label.only.disease = FALSE,
+  figure_Path = str_glue("{figurePath}Heatmap_cMon_1_vs_cMon_1_only_disease"),
+  save = F,
+  fig.width = 11,
+  fig.height = 18,
+  font = 35,
+  title.font = 35,
+  title.face = "bold",
+  legend_h = 10,
+  legend_w = 1,
+  fontface = "bold",
+  grid_width = 15,
+  column_names_rot = 45
+)
+
+```
+
+## Save
+
+```{r}
+save.image(file = "G:/My Drive/Projects/SCVI_Results/Immune_compartment_PBMC/Subset_Agosto_2023/Milo/individual_disease_nhoo/PBMC_Myeloid_session.RData")
+```
+
+```{r}
+load(file = "G:/My Drive/Projects/SCVI_Results/Immune_compartment_PBMC/Subset_Agosto_2023/Milo/individual_disease_nhoo/PBMC_Myeloid_session.RData")
+```
+
+```{r}
+fraction_myel = read.csv("G:/My Drive/Projects/SCVI_Results/Immune_compartment_PBMC/Subset_Agosto_2023/Milo/individual_disease_nhoo/PBMC_Myeloid_individual_disease_Milo_adata_reajusted_Summary_stat_fraction.csv")
+
+fraction_myel = tibble::column_to_rownames(fraction_myel, var = "X")
+
+
+fraction_myel_meta = read.csv("G:/My Drive/Projects/SCVI_Results/Immune_compartment_PBMC/Subset_Agosto_2023/Milo/individual_disease_nhoo/PBMC_Myeloid_individual_disease_Milo_adata_reajusted_Summary_stat_metadata.csv")
+
+fraction_myel_meta = tibble::column_to_rownames(fraction_myel_meta, var = "X")
+```
+
+```{r}
+fraction_myel_2 = pivot_longer(fraction_myel, cols = 1:ncol(fraction_myel), names_to = "donor", values_to = "Percentage")
+```
+
+```{r}
+
+counts(test_adata_) <- assay(test_adata_)
+  
+test_adata_ = logNormCounts(test_adata_)
+
+test_adata_count = assay(test_adata_[, test_adata_$Cell_type_scANVI == "Activated cMon"], "logcounts")%>% t() %>% as.data.frame()
+
+#cMon_1_fract = test_adata_count %>% summarise_at(-1, ~sum(.>=10)/n())%>% t()
+
+
+cMon_1_fract = colSums(test_adata_count) %>% as.data.frame()
+colnames(cMon_1_fract) = "Activated cMon"
+
+test_adata_count = assay(test_adata_[, test_adata_$Cell_type_scANVI == "cMon"], "logcounts")%>% t() %>% as.data.frame()
+
+
+#cMon_2_fract = test_adata_count %>% summarise_at(-1, ~sum(.>=10)/n()) %>% t()
+
+cMon_2_fract = colSums(test_adata_count) %>% as.data.frame()
+
+colnames(cMon_2_fract) = "cMon"
+
+all.equal(rownames(cMon_2_fract), rownames(cMon_1_fract))
+
+cMon_1_cMon_2_fract = cbind(as.data.frame(cMon_1_fract), as.data.frame(cMon_2_fract)) %>% 
+  mutate(ratio = `Activated cMon`/cMon)
+
+
+cMon_1_cMon_2_fract %>% ggplot(aes(x=`Activated cMon`, y=cMon)) +
+  geom_point()
+
+```
+
+```{r}
+plot_ggplot_gene_col(sce = test_adata_, gene="IL1B", title="IL1B", subtitle = "", xlab = "", ylab = "",
+                                size = 2, shape = 20, cell_type = c("Activated cMon", "cMon"), gg_x="Cell_type_scANVI", angle = 90, colmap = vega_20,
+                                base_size = 14, base_family = "sans", base_fontface = "bold", 
+                                plot.title.position = "plot", legend.position = "right", show.x.text = FALSE)
+```
+
+### Venn diagram
+
+```{r}
+library(VennDiagram)
+library(RColorBrewer)
+```
+
+### Activated cMon
+
+```{r}
+cMon_1_hashimoto_deg_dis_ctrl = read.csv(
+  str_glue("{degPathEnriched}cMon_1_hashimoto_deg_dis_ctrl.csv")
+)
+# Generate 3 sets
+set1 <- paste(cMon_1_Sjo_syndr_deg_dis_ctrl$name, cMon_1_Sjo_syndr_deg_dis_ctrl$dirFC, sep = "_")
+set2 <- paste(cMon_1_hashimoto_deg_dis_ctrl$name, cMon_1_hashimoto_deg_dis_ctrl$dirFC, sep = "_")
+set3 <- paste(cMon_1_SLE_deg_dis_ctrl$name, cMon_1_SLE_deg_dis_ctrl$dirFC, sep = "_")
+
+# Prepare a palette of 3 colors with R colorbrewer:
+
+myCol <- brewer.pal(3, "Pastel2")
+
+# Chart
+venn.diagram(
+        x = list(set1, set2, set3),
+        category.names = c("Sjo_syndr" , "hashimoto" , "SLE"),
+        filename = str_glue('{figurePath}cMon_1_venn_diagramm.png'),
+        output=TRUE,
+        
+        # Output features
+        imagetype="png" ,
+        height = 480 , 
+        width = 480 , 
+        resolution = 300,
+        compression = "lzw",
+        
+        # Circles
+        lwd = 2,
+        lty = 'blank',
+        fill = myCol,
+        
+        # Numbers
+        cex = .6,
+        fontface = "bold",
+        fontfamily = "sans",
+        
+        # Set names
+        cat.cex = 0.6,
+        #cat.fontface = "bold",
+        cat.default.pos = "outer",
+        cat.pos = c(-27, 27, 135),
+        cat.dist = c(0.055, 0.055, 0.085),
+        cat.fontfamily = "sans",
+        rotation = 1
+)
+
+```
+
+```{r}
+intersect(intersect(set1, set2), set3)
+```
+
+#### Heatmap
+
+```{r}
+selected_gene = gsub("_.*$", "", intersect(intersect(set1, set2), set3))
+
+
+```
+
+```{r fig.width=15, fig.height=7.5}
+#| fig-width: 25
+#| fig-height: 100
+cel_nh = levels(test_adata_$Cell_type_scANVI)
+
+
+
+test_adata_sub = test_adata_[, test_adata_$Cell_type_scANVI=="Activated cMon" & test_adata_$disease_short %in% c("Healthy", "all_SLE", "all_hashimoto", "all_sjo_syndr")]
+
+
+
+test_adata_prep = prep_de_data(depl_ = "", enrch_ = "", test_adata = test_adata_sub, nhood = FALSE, hvgs = FALSE, cel_of_int_vs_rest = T, cell_type = "Activated cMon")
+
+test_adata_prep$disease_short = str_remove(test_adata_prep$disease_short, "all_") %>% as.factor()
+
+test_adata_prep$disease_dataset = paste(test_adata_prep$disease_short, test_adata_prep$dataset_id, "_") %>% as.factor()
+
+plot_heatmap(
+  test_adata = test_adata_prep,
+  selected_gene = selected_gene,
+  cel.selected = "Activated cMon",
+  #cel_cleaned,
+  aggregate = T,
+  n_top = 20,
+  show_column_names = T,
+  col_pal = vega_20,
+  test.column = "disease_dataset",
+  #
+  column.label2 = "disease_short",
+  labels_annot_bar = F,
+  label.only.disease = TRUE,
+  scale = T,
+  remove_inf = F,
+  cluster.col = F,
+  figure_Path = str_glue("{figurePath}Heatmap_cMon_1_shared_disease_DE_genes"),
+  save = F,
+  fig.width=7,
+  fig.height=8.5,
+)
+
+
+
+```
+
+### cMon
+
+```{r}
+# Generate 3 sets of 200 words
+set1 <- paste(cMon_2_Sjo_syndr_deg_dis_ctrl$name, cMon_2_Sjo_syndr_deg_dis_ctrl$dirFC, sep = "_")
+set2 <- paste(cMon_2_hashimoto_deg_dis_ctrl$name, cMon_2_hashimoto_deg_dis_ctrl$dirFC, sep = "_")
+set3 <- paste(cMon_2_SLE_deg_dis_ctrl$name, cMon_2_SLE_deg_dis_ctrl$dirFC, sep = "_")
+
+# Prepare a palette of 3 colors with R colorbrewer:
+
+myCol <- brewer.pal(3, "Pastel2")
+
+# Chart
+venn.diagram(
+        x = list(set1, set2, set3),
+        category.names = c("Sjo_syndr" , "hashimoto" , "SLE"),
+        filename = str_glue('{figurePath}cMon_2_venn_diagramm.png'),
+        output=TRUE,
+        
+        # Output features
+        imagetype="png" ,
+        height = 480 , 
+        width = 480 , 
+        resolution = 300,
+        compression = "lzw",
+        
+        # Circles
+        lwd = 2,
+        lty = 'blank',
+        fill = myCol,
+        
+        # Numbers
+        cex = .6,
+        fontface = "bold",
+        fontfamily = "sans",
+        
+        # Set names
+        cat.cex = 0.6,
+        #cat.fontface = "bold",
+        cat.default.pos = "outer",
+        cat.pos = c(-27, 27, 135),
+        cat.dist = c(0.055, 0.055, 0.085),
+        cat.fontfamily = "sans",
+        rotation = 1
+)
+
+```
+
+```{r}
+intersect(intersect(set1, set2), set3)
+```
+
+### Non-CMon
+
+```{r}
+# Generate 3 sets of 200 words
+set1 <- paste(cMon_1_Sjo_syndr_deg_dis_ctrl$name, cMon_1_Sjo_syndr_deg_dis_ctrl$dirFC, sep = "_")
+set2 <- paste(cMon_1_hashimoto_deg_dis_ctrl$name, cMon_1_hashimoto_deg_dis_ctrl$dirFC, sep = "_")
+set3 <- paste(cMon_1_SLE_deg_dis_ctrl$name, cMon_1_SLE_deg_dis_ctrl$dirFC, sep = "_")
+
+# Prepare a palette of 3 colors with R colorbrewer:
+
+myCol <- brewer.pal(3, "Pastel2")
+
+# Chart
+venn.diagram(
+        x = list(set1, set2, set3),
+        category.names = c("Sjo_syndr" , "hashimoto" , "SLE"),
+        filename = str_glue('{figurePath}cMon_1_venn_diagramm.png'),
+        output=TRUE,
+        
+        # Output features
+        imagetype="png" ,
+        height = 480 , 
+        width = 480 , 
+        resolution = 300,
+        compression = "lzw",
+        
+        # Circles
+        lwd = 2,
+        lty = 'blank',
+        fill = myCol,
+        
+        # Numbers
+        cex = .6,
+        fontface = "bold",
+        fontfamily = "sans",
+        
+        # Set names
+        cat.cex = 0.6,
+        #cat.fontface = "bold",
+        cat.default.pos = "outer",
+        cat.pos = c(-27, 27, 135),
+        cat.dist = c(0.055, 0.055, 0.085),
+        cat.fontfamily = "sans",
+        rotation = 1
+)
+
+```
+
+```{r}
+intersect(intersect(set1, set2), set3)
+```
+
+```{r}
+levels(test_adata_$disease_short)
+
+cMon_1_vs_cMon_2 = run_deg(
+  test_adata = test_adata_,
+  lfc = 1,
+  p.val = 0.05,
+  cel_type = c("Mac_S100A8_prod"),
+  test_col="disease_short",
+  ctrl=c("Remission_RA"),
+  var_column = "disease_short",
+  var.included = c("Remission_RA", "Resitant_treat_RA"),
+  covariable.dataset = F,
+  covar = "dataset_id"
+)
+
+Mac_S100A8_Remission_vs_Resistant = Mac_S100A8_Remission_vs_Resistant %>% arrange(desc(AUC))
+```
+
+### Egress markers
+
+```{r fig.width=20, fig.height=5}
+levels(test_adata_$Cell_type_scANVI)
+
+#test_adata = test_adata_[, test_adata_$disease_short %in% c("Naïve_treat_RA", "Resitant_treat_RA")]
+
+
+
+plot_violin_facet(
+  sce = test_adata,
+  gene = Mac_S100A8_Resistant_vs_Naive_treat_RA$name[1:20],
+  xlab = "",
+  ylab = "",
+  size = 3,
+  shape = 20,
+  cell_type = c("Activated cMon", "cMon"),
+  gg_x = "disease_short",
+  angle = 90,
+  colmap = color_disease_tis,
+  base_size = 14,
+  base_line_size = 0.5,
+  base_family = "sans",
+  base_fontface = "bold",
+  legend.title = "Groups",
+  strip.colour = "black",
+  strip.fill = "grey80",
+  plot.title.position = "plot",
+  plot.title = "S100A8+ macrophages DEG (Resitant_treat_RA vs Naïve_treat_RA)",
+  legend.position = "right",
+  ncol = 10,
+  show.x.text = FALSE,
+  figure_Path = "",
+  fig.width = 8,
+  fig.height = 3,
+  save = T,
+  stat = F,
+  stat.ref = "Remission_RA",
+  stat.method = "t.test",
+  stat.paired = FALSE,
+  label.y = NULL,
+  violin = F,
+  include_violin_boxplot = T,
+  violin_boxplot_w = 0.1
+)
+
+
+```
+
+
+### Figure 3D
+
+```{r fig.width=11, fig.height=18}
+#| fig-width: 25
+#| fig-height: 100
+
+
+cel_nh = unique(test_adata_$Cell_type_scANVI)
+
+
+n_top = 25
+
+test_adata_sub = test_adata_[, test_adata_$Cell_type_scANVI %in% c("Activated cMon", "cMon")]
+
+test_adata_sub$disease_short = str_remove(test_adata_sub$disease_short, "all_")
+
+test_adata_sub$disease_short = str_replace(test_adata_sub$disease_short, "CD", "IBD")
+
+test_adata_sub$disease_short = str_replace(test_adata_sub$disease_short, "hashimoto", "Hashimoto's thyroiditis")
+
+test_adata_sub$disease_short = str_replace(test_adata_sub$disease_short, "spondoarthritis", "Spondyloarthritis")
+
+test_adata_sub$disease_short = str_replace(test_adata_sub$disease_short, "sjo_syndr", "Sjögren Syndrome") 
+
+#test_adata_sub = test_adata_[, test_adata_$Cell_type_scANVI %in% c("Intermediate_macrophage", "Mac_MERTK_hi_TREM2_low", "Mac_NUPR1_TREM2_hi", #"Mac_S100A8_prod", "Mo_Mac_CX3CR1", "Mo_Mac_LYVE1_plus")]
+
+test_adata_prep = prep_de_data(depl_ = "", enrch_ = "", test_adata = test_adata_sub, nhood = FALSE, hvgs = FALSE, cel_of_int_vs_rest = T, cell_type = "Activated cMon")
+
+test_adata_prep$Cell_type_scANVI %>% unique()
+test_adata_prep$disease_short %>% unique()
+
+test_adata_prep$disease_short = factor(test_adata_prep$disease_short, levels = c("Healthy", sort(as.character(
+  unique(test_adata_prep$disease_short[!(test_adata_prep$disease_short %in% c("Healthy"))])
+))))
+  
+test_adata_prep$disease_short %>% unique()
+
+gsea_net_heat = rbind(
+  data.frame(
+    Term = gsea_MSigDB_Hallmark_2020$Term[1],
+    symbol = str_split_1(gsea_MSigDB_Hallmark_2020$leading_edge[1], pattern = ",")
+  ),
+  data.frame(
+    Term = gsea_MSigDB_Hallmark_2020$Term[2],
+    symbol = str_split_1(gsea_MSigDB_Hallmark_2020$leading_edge[2], pattern = ",")
+  )
+)
+
+
+gsea_net_heat$value = 1
+
+gsea_net_heat = pivot_wider(gsea_net_heat, names_from = Term, values_from = value, values_fill = 0)
+
+gsea_net_heat = tibble::column_to_rownames(gsea_net_heat, var="symbol")
+
+colnames(gsea_net_heat) = str_replace(colnames(gsea_net_heat), "Response", "\nResponse")
+
+plot_heatmap_wout_bar(
+  test_adata = test_adata_prep[,test_adata_prep$disease_short!="Healthy"],
+  cel.selected = "Activated cMon",
+  selected_gene = rownames(gsea_net_heat),
+  gsea_net_heat = gsea_net_heat,
+  ref.vs.other = FALSE,
+  n_top = 15,
+  aggregate = TRUE,
+  show_column_names = TRUE,
+  aggr_fun = "mean",
+  col_pal = vega_20,
+  test.column = "Cell_type_scANVI",
+  column.label = "disease_short",
+  col_test = c("grey", "grey50"),
+  scale = TRUE,
+  remove_inf = TRUE,
+  cluster.col = FALSE,
+  labels_annot_bar = TRUE,
+  label.only.disease = FALSE,
+  figure_Path = str_glue("{figurePath}Heatmap_cMon_1_vs_cMon_1_only_disease"),
+  save = F,
+  fig.width = 11,
+  fig.height = 18,
+  font = 25,
+  path.col.font = 20,
+  title.font = 18,
+  title.face = "bold",
+  fontface = "bold",
+  grid_width = 15,
+  legend_h = 10,
+  legend_w = 2,
+  grid_width1 = 2,
+  grid_height1 = 2,
+  title_g = 10, broadcell = "macrophages",
+  grid_width_row_annot = 8, 
+  rowannot = T, path_title = "Pathways",
+  column.name.col = "grey20"
+)
+
+
+```

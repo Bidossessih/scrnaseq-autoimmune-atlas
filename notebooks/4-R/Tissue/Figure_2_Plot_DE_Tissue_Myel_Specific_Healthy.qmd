@@ -1,0 +1,1457 @@
+---
+title: "DE_Milo_Tissue_Myeloid Network expansion"
+author: "Bidossessi Hounkpe"
+date: "16/04/2023"
+format: html
+editor: visual
+---
+
+## Load data
+
+```{r}
+rm(list=ls())
+#setwd("/mnt/g/My Drive/Projects/SCVI_Results/All_Tissue_or_Nonimmune/Subset_Reintegrated_full/Milo/individual_disease_nhoo")
+#setwd("G:/My Drive/Projects/SCVI_Results/All_Tissue_or_Nonimmune/Subset_Reintegrated_full/Milo/individual_disease_nhoo")
+load(file = "C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/sanger_gdrive/Projects/SCVI_Results/All_Tissue_or_Nonimmune/Subset_Reintegrated_full/Milo/individual_disease_nhoo/Tissue_Myeloid_session.RData")
+```
+
+```{r}
+
+rm(list = as.vector(lsf.str())) #remove functions from global env
+```
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,root.dir = "/C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/sanger_gdrive/Projects/SCVI_Results/All_Tissue_or_Nonimmune/Subset_Reintegrated_full/Milo/enriched_depleted_SCE")
+
+
+```
+
+## Plot
+
+```{r}
+basepath <- "C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/scripts/scrnaseq-autoimmune-atlas/notebooks/4-R/"
+```
+
+
+```{r}
+pacman::p_load(
+  tidyverse,
+  OmnipathR,
+  igraph,
+  ggraph,
+  graphlayouts,
+  ggforce,
+  ggpubr,
+  tidygraph,
+  httr,
+  SingleCellExperiment,
+  scran,
+  scuttle,
+  ggprism,
+  ComplexHeatmap,
+  pheatmap,
+  circlize,
+  reticulate,
+  RCy3,
+  biomaRt,
+  ghql,
+  jsonlite,
+  ktplots,
+  ggbeeswarm,
+  ggrepel
+)
+
+#Use conda env for reticulate
+use_condaenv("ScGwas", required = TRUE)
+#colors
+
+#### 
+#source("C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/scripts/autoimmuneSC/Integrated/R/colors.R")
+source(str_glue(basepath, "colors.R"))
+# Source helper functions
+#source("C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/scripts/autoimmuneSC/Integrated/R/helper_fun.R")
+source(str_glue(basepath, "helper_fun.R"))
+# Network expansion 
+#source("C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/scripts/autoimmuneSC/Integrated/R/openTarget.R")
+source(str_glue(basepath, "openTarget.R"))
+
+source(str_glue(basepath, "Milo_horizontal_plot.R"))
+
+```
+
+```{python}
+import os,sys
+import numpy as np
+import pandas as pd
+#import drug2cell as d2c
+#import scanpy as sc
+#import sctk
+#import gc
+#sys.path.append("/mnt/c/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/scripts/autoimmuneSC/AIID_notebooks/")
+
+sys.path.append("C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/scripts/autoimmuneSC/AIID_notebooks/")
+
+from inflapy.immunoFunc import *
+import gseapy as gp
+```
+
+```{r}
+#figurePath = "/mnt/g/My Drive/Projects/SCVI_Results/All_Tissue_or_Nonimmune/Subset_Reintegrated_full/Figures/"
+
+figurePath = "C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/sanger_gdrive/Projects/SCVI_Results/All_Tissue_or_Nonimmune/Subset_Reintegrated_full/Figures/"
+```
+
+
+
+
+### Figure 2B
+
+```{r fig.fullwidth = TRUE, fig.width=30, fig.height=15}
+
+compare_disease_df = read.csv("../../data/Myeloid_From_Tissue_label_transfer_Milo_3K_reajusted.csv")
+
+unique(compare_disease_df$disease)
+unique(compare_disease_df$nhood_annotation)
+
+non_cmon_mat = read.csv("../../data/Myeloid_From_Tissue_Non_cMon_mature.csv")
+
+table(non_cmon_mat$X %in% compare_disease_df$index_cell)
+
+compare_disease_df$nhood_annotation = case_when(
+  compare_disease_df$index_cell %in% non_cmon_mat$X ~ "CD14+CD16+ Mon",
+  TRUE ~ compare_disease_df$nhood_annotation
+)
+
+
+compare_disease_df$nhood_annotation = ifelse(compare_disease_df$nhood_annotation%in%c("Mo-Mac", "Mo-Mac_CX3CR1"), "Mac CX3CR1+", compare_disease_df$nhood_annotation)
+
+compare_disease_df$nhood_annotation = str_replace(compare_disease_df$nhood_annotation, "Mo-Mac", "Mac")
+
+compare_disease_df$nhood_annotation = ifelse(compare_disease_df$nhood_annotation == "Mac CCL2+LYVE1+", "Mac LYVE1+", compare_disease_df$nhood_annotation)
+
+compare_disease_df$nhood_annotation = str_replace(compare_disease_df$nhood_annotation, "Intermediate macrophage", bquote("IL1B high macrophage"))
+
+compare_disease_df$Sig = ifelse(compare_disease_df$Sig == "True", TRUE, FALSE)
+
+print(table(compare_disease_df$disease))
+#### Prepare data
+
+
+compare_disease_df = compare_disease_df[compare_disease_df$disease %in% c('CD_colon', 'Uninfl_CD_colon', 'CD_ileum', 'Resitant_treat_RA_syno_membr', 'Remission_RA_syno_membr', 'Naïve_treat_RA_syno_membr'), ]
+
+
+compare_disease_df = compare_disease_df[!(compare_disease_df$nhood_annotation %in% c('DC1', 'DC2', 'pDC', 'Mast cell', 'Mig DC', 'Cycling', 'Unknown')), ]
+
+
+#### Prepare data
+
+nhoo_prep = milo_prep_data(nhood_res=compare_disease_df, condition = "disease", Sig = "Sig", thres = 0.1,
+                     dis_pref = "zz", index_cell = "index_cell", order_by_kth = FALSE,
+                     nhood_annotation="nhood_annotation", n_shared=0,
+                     SpatialFDR = "SpatialFDR", logFC = "logFC")
+  
+
+nhoo_prep$condition = str_replace(nhoo_prep$condition, "CD", "IBD")
+
+nhoo_prep$condition = str_replace(nhoo_prep$condition, "Uninfl_IBD_colon", "Uninflamed_IBD_colon")
+
+nhoo_prep$condition = str_replace(nhoo_prep$condition, "Resitant_treat_RA_syno_membr", "Resistant_treat_RA_syno_membr") %>% as.factor()
+
+disease = c(
+  IBD_colon = "IBD",
+  IBD_ileum = "IBD",
+  Naïve_treat_RA_syno_membr = "Naïve_treat_RA",
+  Remission_RA_syno_membr = "Remission_RA",
+  Resistant_treat_RA_syno_membr = "Resistant_treat_RA",
+  Uninflamed_IBD_colon = "IBD"
+)
+
+
+tissue = c(
+  IBD_colon = "Colon",
+  IBD_ileum = "Ileum",
+  Naïve_treat_RA_syno_membr = "Synovial membrane",
+  Remission_RA_syno_membr = "Synovial membrane",
+  Resistant_treat_RA_syno_membr = "Synovial membrane",
+  Uninflamed_IBD_colon = "Uninflamed colon"
+)
+
+nhoo_prep$Disease = disease[nhoo_prep$condition]
+
+nhoo_prep$Tissue = tissue[nhoo_prep$condition]
+
+#nhoo_prep$condition = nhoo_prep$Disease
+
+milo_plot_horizontal(
+  nhoo_prep = nhoo_prep,
+  rel_widths = c(0.15, 1, 0.25),
+  anot_bar_height = 0.05,
+  col.pal = color_cell_tissue,
+  label_size = 30,
+  annot_size = 15,
+  annot_col = "black",
+  annot.bar.height = 0.5,
+  expand_y_sc = 0.1,
+  legend.key.size = unit(1.5, "cm"),
+  legend.text = element_text(size = 40),
+  legend.title = element_text(size = 40, face = "bold"),
+  legend.position = "bottom",
+  legend.box.spacing = unit(5, 'cm'),
+  left.annot = tissue,
+  condition_tile_custom = disease,
+  legend.spacing =5,
+  fc_legend.size =5,
+  fc_annot_size = 40,
+  legend.margin.custom = -220,
+  dendro.width = 3,
+  y.axis.label = "Comparative neighbourhood \nabundance",
+  y.axis.label.size = 35, bar.title = "Tissue"
+) +
+  guides(fill = guide_legend(title.position="top", title.hjust = 0.5, ncol = 2))
+
+
+
+#milo_hori_plot
+
+ggsave(str_glue("{figurePath}Milo_myel_From_Tissue_compareDisease_with_specific_healthy_2026.png"), width = 35, height = 15, bg='transparent')
+
+ggsave(str_glue("{figurePath}Milo_myel_From_Tissue_compareDisease_with_specific_healthy_2026.svg"), width = 35, height = 15, bg='transparent')
+```
+
+### Figure 2C: Correlation Intermediate_macrophage_vs_Mo_Mac
+
+```{r}
+milo_csv_path <- file.path(
+  "C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/sanger_gdrive/Projects",
+  "SCVI_Results/All_Tissue_or_Nonimmune/Subset_Reintegrated_full/Milo",
+  "individual_disease_nhoo/Tissue_Myeloid_individual_disease_Milo_adata.csv"
+)
+
+myeloid_obs <- read.csv(milo_csv_path)
+
+table(myeloid_obs$Cell_type_scANVI)
+
+myeloid_obs <- myeloid_obs %>%
+  mutate(
+    disease_tissue = str_replace(
+      disease_tissue, "Resitant_treat_RA_syno_membr", "Resistant_treat_RA_syno_membr"
+    ),
+    # Order matters: bare "Mo-Mac" and "Mo-Mac_CX3CR1" both collapse into
+    # "Mac CX3CR1"; every remaining "Mo-Mac <suffix>" just loses the "Mo-".
+    Cell_type_scANVI = Cell_type_scANVI %>%
+      str_replace("^Mo-Mac$",             "Mac CX3CR1") %>%
+      str_replace("^Mo-Mac_CX3CR1$",      "Mac CX3CR1") %>%
+      str_replace("^Mo-Mac",              "Mac") %>%
+      str_replace("Intermediate macrophage", "IL1B+ macrophage")
+  ) %>%
+  filter(Cell_type_scANVI != "Unknown")
+
+table(myeloid_obs$Cell_type_scANVI)
+
+
+```
+
+```{r}
+celltype_freq_long <- myeloid_obs %>%
+  dplyr::select(donor_id, disease_tissue, Cell_type_scANVI) %>%
+  mutate(disease_tissue = as.factor(disease_tissue)) %>%
+  dplyr::count(donor_id, disease_tissue, Cell_type_scANVI, name = "n_cells_celltype") %>%
+  group_by(donor_id) %>%
+  mutate(
+    n_cells_donor  = sum(n_cells_celltype),
+    cells_per_1000 = n_cells_celltype * 1000 / n_cells_donor
+  ) %>%
+  ungroup()
+
+```
+
+
+```{r}
+celltype_freq_wide <- celltype_freq_long %>%
+  dplyr::select(donor_id, Cell_type_scANVI, cells_per_1000) %>%
+  pivot_wider(names_from = Cell_type_scANVI, values_from = cells_per_1000) %>%
+  dplyr::select(donor_id, `IL1B+ macrophage`, `Mac LYVE1+`) %>%
+  na.omit()
+```
+
+```{r}
+cor.test(
+  log2(celltype_freq_wide$`IL1B+ macrophage`),
+  log2(celltype_freq_wide$`Mac LYVE1+`)
+  )
+```
+
+```{r fig.fullwidth = TRUE, fig.width=10, fig.height=6}
+celltype_freq_wide %>%
+  ggplot(aes(y = log2(`IL1B+ macrophage`), x = log2(`Mac LYVE1+`))) +
+  theme_bw() +
+  labs(
+  y = bquote(log[2] ~ "(" * italic("IL1B")^"+" ~ "macrophages per 1000 cells)"),
+  x = bquote(log[2] ~ "(" * italic("LYVE1")^"+" ~ "macrophages per 1000 cells)")
+  ) +
+  geom_point(size = 2) +
+  geom_smooth(method = "lm")+#, formula = y ~ poly(x, 2)) +
+  stat_cor(method = "pearson", label.x = 2.5, label.y = 11, size = 8) +
+  theme(
+    axis.text  = element_text(size = 20),
+    axis.title = element_text(size = 20),
+    axis.ticks = element_line(linewidth = 2)
+  )
+
+ggsave(str_glue("{figurePath}Intermediate_macrophage_vs_Mo_Mac_LYVE1_2026.png"), width = 8, height = 6, bg='transparent')
+```
+
+# From Tissue
+
+### CX3CR1 macrophage
+
+```{r}
+Cx3CR1_macr_genes_up_RA = intersect(
+  Mo_Mac_CX3CR1_disease_program_Naïve_treat_RA_vs_remission$name[Mo_Mac_CX3CR1_disease_program_Naïve_treat_RA_vs_remission$dirFC ==
+                                                                   "Up"],
+  Mo_Mac_CX3CR1_disease_program_Resitant_treat_RA_vs_remission$name[Mo_Mac_CX3CR1_disease_program_Resitant_treat_RA_vs_remission$dirFC ==
+                                                                      "Up"]
+)
+
+Cx3CR1_macr_genes_up_CD = intersect(
+  Mo_Mac_CX3CR1_disease_program_colon_CD$name[Mo_Mac_CX3CR1_disease_program_colon_CD$dirFC ==
+                                                "Up"],
+  Mo_Mac_CX3CR1_disease_program_ileum_CD$name[Mo_Mac_CX3CR1_disease_program_ileum_CD$dirFC ==
+                                                "Up"]
+)
+
+
+Cx3CR1_macr_genes_down_RA = intersect(
+  Mo_Mac_CX3CR1_disease_program_Naïve_treat_RA_vs_remission$name[Mo_Mac_CX3CR1_disease_program_Naïve_treat_RA_vs_remission$dirFC ==
+                                                                   "Down"],
+  Mo_Mac_CX3CR1_disease_program_Resitant_treat_RA_vs_remission$name[Mo_Mac_CX3CR1_disease_program_Resitant_treat_RA_vs_remission$dirFC ==
+                                                                      "Down"]
+)
+
+
+Cx3CR1_macr_genes_down_CD = intersect(
+  Mo_Mac_CX3CR1_disease_program_colon_CD$name[Mo_Mac_CX3CR1_disease_program_colon_CD$dirFC ==
+                                                "Down"],
+  Mo_Mac_CX3CR1_disease_program_ileum_CD$name[Mo_Mac_CX3CR1_disease_program_ileum_CD$dirFC ==
+                                                "Down"]
+)
+```
+
+#### GSEA
+
+```{python}
+gp.get_library_name()
+```
+
+```{r}
+genelist = unique(c(Cx3CR1_macr_genes_up_RA, Cx3CR1_macr_genes_up_CD))
+
+genelist[1:5]
+```
+
+```{python}
+
+genelist = r.genelist 
+
+gene_sets=['MSigDB_Hallmark_2020']  
+
+enr = gp.enrichr(gene_list=genelist,gene_sets=gene_sets, organism='human', outdir=None) 
+
+enr.results
+
+enr1 = enr.results 
+
+
+# reactome
+
+enr = gp.enrichr(gene_list=genelist,gene_sets=['Reactome_2022'], organism='human', outdir=None) 
+
+enr.results
+
+enr2 = enr.results 
+
+
+
+```
+
+```{r}
+Hall_mark= py$enr1 %>% arrange(desc(`Combined Score`))
+
+Reactome= py$enr2 %>% arrange(desc(`Combined Score`))
+```
+
+```{r fig.fullwidth = TRUE, fig.width=6, fig.height=2.5}
+gsea_plot(gsea=Hall_mark, n_top = 10, x = "Term", y = "Adjusted P-value", log_y = F, bar_plot = TRUE, save = FALSE, ylab="-log10(adjusted P-value)", xlab = "Hallmark GSEA")
+
+```
+
+```{r fig.fullwidth = TRUE, fig.width=8, fig.height=3.5}
+
+Reactome$Term = str_remove(Reactome$Term, " R-HSA-.*$") %>% str_wrap(., 45)
+
+gsea_plot(gsea=Reactome[-6,], n_top = 10, x = "Term", y = "Combined Score", log_y = F, bar_plot = TRUE, save = FALSE, ylab="Combined score", xlab = "Reactome")
+
+
+```
+
+```{r fig.width=8, fig.height=3.5}
+gsea_plot(
+  gsea = rbind(Reactome[1:3,], Hall_mark[1:7,]),
+  n_top = 10,
+  x = "Term",
+  y = "Adjusted P-value",
+  log_y = F,
+  bar_plot = TRUE,
+  ylab = "-log10(Adjusted P-value)",
+  xlab = "",
+  figure_Path = str_glue("{figurePath}/GSEA_Tissue_CX3CR1_Macr"),
+  save = TRUE,
+  fig.width = 8,
+  fig.height = 3.5
+)
+
+```
+
+```{r}
+gsea_net = gsea_2_net(
+  gsea_res = rbind(Reactome[1:3, ], Hall_mark[1:7, ]),
+  pval = "Adjusted P-value",
+  Combined.Score = "Combined Score",
+  pval.threshold = 0.05,
+  openTarget = NULL,
+  gsea_Path = str_glue("{figurePath}/GSEA_Tissue_CX3CR1_Macr_Cytoscape")
+)
+```
+
+Figure 2F
+
+```{r fig.width=7, fig.height=6}
+levels(test_adata_$Cell_type_scANVI)
+
+test_adata_$disease_bin = ifelse(test_adata_$disease_short == "Healthy", "Healthy", "Diseases") %>% as.factor()
+
+
+plot_violin_facet(
+  sce = test_adata_,
+  gene = sort(c("NR1H3", "GBP1", "KCNJ2", "KCNJ10",
+           "ANPEP", "WARS", "TOM1", "SIRPB1", "NR1H3")),
+  xlab = "",
+  ylab = "",
+  size = 3,
+  shape = 20,
+  cell_type = c("Mac_CX3CR1"),
+  gg_x = "disease_bin",
+  angle = 90,
+  colmap = c("#6faaf4", "#fbc8d8"),
+  base_size = 14,
+  base_line_size = 0.5,
+  base_family = "sans",
+  base_fontface = "bold",
+  legend.title = "Groups",
+  strip.colour = "black",
+  strip.fill = "grey80",
+  plot.title.position = "plot",
+  plot.title = "CX3CR1+ macrophages DEG (Disease vs Healthy)",
+  legend.position = "right",
+  ncol = 4,
+  show.x.text = FALSE,
+  figure_Path = str_glue(
+    "{figurePath}Boxplot_facet_Mac_CX3CR1_prod_macrophage_disease_DE_genes"
+  ),
+  fig.width = 7,
+  fig.height = 6,
+  save = TRUE,
+  stat = TRUE,
+  stat.ref = "Healthy",
+  stat.method = "t.test",
+  stat.paired = FALSE,
+  label.y = NULL,
+  violin = F,
+  include_violin_boxplot = T,
+  violin_boxplot_w = 0.1
+)
+```
+
+### IL1B macrophage
+
+```{r}
+# meta_RA_CD_priori=igraph::as_data_frame(subnet_RA_CD_priori, what = "vertices")
+# 
+# 
+# meta_RA_CD_priori = data.frame(meta_RA_CD_priori[,11:12], Value = 1)
+# 
+# 
+# meta_RA_CD_priori = pivot_wider(meta_RA_CD_priori, names_from = Origin, values_from = Value, values_fill = 0)
+```
+
+```{r}
+int_macr_genes_up_RA = intersect(int_macr_disease_program_Naïve_treat_RA$name[int_macr_disease_program_Naïve_treat_RA$dirFC=="Up"],
+                                        int_macr_disease_program_Resitant_treat_RA$name[int_macr_disease_program_Resitant_treat_RA$dirFC=="Up"])
+
+int_macr_genes_up_CD = intersect(int_macr_disease_program_colon_CD$name[int_macr_disease_program_colon_CD$dirFC=="Up"],
+                                        int_macr_gene_program_ileum_CD$name[int_macr_gene_program_ileum_CD$dirFC=="Up"])
+
+
+int_macr_genes_down_RA = intersect(int_macr_disease_program_Naïve_treat_RA$name[int_macr_disease_program_Naïve_treat_RA$dirFC=="Down"],
+                                        int_macr_disease_program_Resitant_treat_RA$name[int_macr_disease_program_Resitant_treat_RA$dirFC=="Down"])
+
+
+int_macr_genes_down_CD = intersect(int_macr_disease_program_colon_CD$name[int_macr_disease_program_colon_CD$dirFC=="Down"],
+                                        int_macr_gene_program_ileum_CD$name[int_macr_gene_program_ileum_CD$dirFC=="Down"])
+```
+
+#### GSEA
+
+```{python}
+#gp.get_library_name()
+```
+
+```{r}
+genelist = unique(c(int_macr_genes_up_RA, int_macr_genes_up_CD))
+
+genelist[1:5]
+```
+
+```{python}
+
+genelist = r.genelist 
+
+gene_sets=['MSigDB_Hallmark_2020']  
+
+enr = gp.enrichr(gene_list=genelist,gene_sets=gene_sets, organism='human', outdir=None) 
+
+enr.results
+
+enr1 = enr.results 
+
+
+# reactome
+
+enr = gp.enrichr(gene_list=genelist,gene_sets=['Reactome_2022'], organism='human', outdir=None) 
+
+enr.results
+
+enr2 = enr.results 
+
+
+
+```
+
+```{r}
+Hall_mark= py$enr1 %>% arrange(desc(`Combined Score`))
+
+Reactome= py$enr2 %>% arrange(desc(`Combined Score`))
+```
+
+```{r fig.fullwidth = TRUE, fig.width=6, fig.height=2.5}
+gsea_plot(gsea=Hall_mark, n_top = 10, x = "Term", y = "Adjusted P-value", log_y = F, bar_plot = TRUE, save = FALSE, ylab="-log10(adjusted P-value)", xlab = "Hallmark GSEA")
+
+```
+
+```{r fig.fullwidth = TRUE, fig.width=8, fig.height=3.5}
+
+Reactome$Term = str_remove(Reactome$Term, " R-HSA-.*$") %>% str_wrap(., 45)
+
+gsea_plot(gsea=Reactome[-6,], n_top = 10, x = "Term", y = "Combined Score", log_y = F, bar_plot = TRUE, save = FALSE, ylab="Combined score", xlab = "Reactome")
+
+
+```
+
+```{r fig.width=8, fig.height=3.5}
+gsea_plot(
+  gsea = rbind(Reactome[1:3,], Hall_mark[1:7,]),
+  n_top = 10,
+  x = "Term",
+  y = "Adjusted P-value",
+  log_y = F,
+  bar_plot = TRUE,
+  ylab = "-log10(Adjusted P-value)",
+  xlab = "",
+  figure_Path = str_glue("{figurePath}/GSEA_Tissue_IntermediateMacr"),
+  save = FALSE,
+  fig.width = 8,
+  fig.height = 3.5
+)
+
+```
+
+```{r}
+gsea_net = gsea_2_net(
+  gsea_res = rbind(Reactome[1:3, ], Hall_mark[1:7, ]),
+  pval = "Adjusted P-value",
+  Combined.Score = "Combined Score",
+  pval.threshold = 0.05,
+  openTarget = NULL,
+  gsea_Path = str_glue("{figurePath}/GSEA_Tissue_IntermediateMacr_Cytoscape")
+)
+```
+
+```{r fig.width=40, fig.height=6}
+order_gsea = unique(gsea_net[,c(1,7)]) %>% arrange(adj.pval)
+
+gsea_heat = gsea_net[gsea_net$Term %in% order_gsea$Term[1:5],1:2]
+
+gsea_heat$value = 1
+
+gsea_heat = pivot_wider(gsea_heat, names_from = symbol, values_from = value, values_fill = 0)
+
+gsea_heat = tibble::column_to_rownames(gsea_heat, var="Term")
+
+gsea_heat = gsea_heat[order_gsea$Term[1:5],]
+
+
+colors = structure(c("grey90", "grey35"), names = c(0,1))
+
+
+
+ha_row_bar = rowAnnotation(
+    "-log10 of p-value" = anno_barplot(
+        -log10(order_gsea$adj.pval[1:5]), 
+        #bar_width = 1, 
+        gp = gpar(col = "white", fill = "#c49c94", size = 9), 
+        border = FALSE,
+        # axis_param = list(at = c(0, 5e5, 1e6, 1.5e6),
+        #     labels = c("0", "500k", "1m", "1.5m")),
+        annotation_legend_param = list(
+        "-log10 of p-value" = list(
+          title_gp = gpar(fontsize = 30, fontface = "bold"),
+          labels_gp = gpar(fontsize = 30),
+          grid_width = unit(10, "mm"),
+          grid_height = unit(10, "mm")
+        )
+      ),
+       width = unit(10, "cm")
+    ), show_annotation_name = TRUE)
+
+
+rownames(gsea_heat) = str_remove(rownames(gsea_heat), " R-HSA.*$")
+
+
+heat_m = Heatmap(
+  gsea_heat,
+  name = "mat",
+  col = colors,
+  column_title = "",
+  cluster_rows = F,
+  #col = col_fun,
+  cluster_columns = T,
+  show_row_dend = FALSE,
+  rect_gp = gpar(col = "white"),
+  show_column_names = T,
+  show_column_dend = F,
+  show_row_names = T,
+  #top_annotation = ha_col,
+  right_annotation = ha_row_bar,
+  row_names_side = "left",
+  width = ncol(gsea_heat) * unit(12, "mm"),
+  height = ncol(gsea_heat) * unit(2, "mm"),
+  row_names_gp = gpar(fontsize = 30),
+  column_names_gp = gpar(fontsize = 30),
+  #column_dend_height = unit(10, "mm"),
+  heatmap_legend_param = list(
+    title_gp = gpar(fontsize = 30, fontface = "bold"),
+    labels_gp = gpar(fontsize = 30),
+    legend_height = unit(20, "cm"),
+    legend_width = unit(20, "cm"),
+    grid_width = unit(10, "mm"),
+    title_gap = unit(6, "mm")
+  )
+)# + ha_row_bar
+
+
+heat_m = ggplotify::as.ggplot(heat_m)
+  
+plot(heat_m)
+
+# "#1f77b4" "#aec7e8" "#ff7f0e" "#ffbb78" "#2ca02c" "#98df8a" "#d62728" "#ff9896" "#9467bd" "#c5b0d5" "#8c564b" "#c49c94" "#e377c2" "#f7b6d2" "#7f7f7f"
+# [16] "#c7c7c7" "#bcbd22" "#dbdb8d" "#17becf" "#9edae5"
+```
+
+```{r}
+ggsave(str_glue("{figurePath}/GSEA_Heatmap_Tissue_IntermediateMacr.png"), width = 40, height = 6, bg='transparent')
+```
+
+#### Heatmap
+#### Figure 2D
+
+```{r}
+selected_gene_int_macr = unique(c(str_split(Reactome$Genes[c(3)], ";")[[1]], str_split(Reactome$Genes[11], ";")[[1]], 
+                                  str_split(Hall_mark$Genes[1], ";")[[1]], str_split(Hall_mark$Genes[7], ";")[[1]]))
+
+
+```
+
+```{r fig.width=20, fig.height=25}
+
+
+test_adata_sub = test_adata_#[, (test_adata_$disease_short!="Healthy" & test_adata_$Cell_type_scANVI=="Intermediate_macrophage") | 
+                              # (test_adata_$disease_short=="Healthy" & test_adata_$Cell_type_scANVI!="Intermediate_macrophage") &
+                              # !(test_adata_$Cell_type_scANVI %in% c("Mac1", "Mac2"))]
+
+#test_adata_sub = test_adata_[, test_adata_$Cell_type_scANVI %in% c("Intermediate_macrophage", "Mac_MERTK_hi_TREM2_low", "Mac_NUPR1_TREM2_hi", #"Mac_S100A8_prod", "Mo_Mac_CX3CR1", "Mo_Mac_LYVE1_plus")]
+
+test_adata_prep = prep_de_data(depl_ = "", enrch_ = "", test_adata = test_adata_sub, nhood = FALSE, hvgs = FALSE, cel_of_int_vs_rest = T, cell_type = "Intermediate_macrophage")
+
+
+test_adata_prep$Cell_bin = ifelse(test_adata_prep$Cell_type_scANVI == "Intermediate_macrophage", "Intermediate_macrophage", "Other") %>% 
+ str_replace(., "Intermediate_macrophage", "IL1B high \nmacrophage") %>% as.factor()
+
+test_adata_prep$disease_short = str_replace(test_adata_prep$disease_short, "CD", "IBD") %>% as.factor()
+
+path_heatmap = c("TNF-alpha Signaling via NF-kB", "IL-6/JAK/STAT3 Signaling", "IL-2/STAT5 Signaling")
+
+#sort(unique(gsea_net$symbol[gsea_net$Term %in% path_heatmap]))
+
+gene_heat_IL1B_macr = c("ADAM19", "B4GALT5", "BCL2A1", "CCL20", "CCL7", "CSF1", "CXCL2",
+                    "ICAM1", "IER3", "IL1B", "IL3RA", "IL7R", "INHBA", "KYNU", "MSC",
+                    "NFKB1", "SPP1", "TNF", "TNFAIP3", "TNFAIP6", "TNFAIP8", "TNFRSF18", "TRAF1")
+
+
+gsea_net_heat = gsea_net[gsea_net$Term %in% path_heatmap,1:2]
+
+gsea_net_heat = gsea_net_heat[gsea_net_heat$symbol %in% gene_heat_IL1B_macr, ]
+
+gsea_net_heat$value = 1
+
+gsea_net_heat = pivot_wider(gsea_net_heat, names_from = Term, values_from = value, values_fill = 0)
+
+gsea_net_heat = tibble::column_to_rownames(gsea_net_heat, var="symbol")
+
+
+
+colors = structure(c("grey90", "grey35"), names = c(0,1))
+
+
+
+hp = plot_heatmap_wout_bar(
+  test_adata = test_adata_prep,
+  cel.selected = "IL1B high \nmacrophage",
+  selected_gene = c("IL1B", "BCL2A1", rownames(gsea_net_heat)[!(rownames(gsea_net_heat) %in% c("IL1B","BCL2A1"))]),
+  gsea_net_heat = gsea_net_heat,
+  n_top = 15,
+  aggregate = TRUE,
+  show_column_names = TRUE,
+  aggr_fun = "mean",
+  col_pal = vega_20,
+  test.column = "Cell_bin",
+  column.label = "disease_short",
+  col_test = c("grey", "grey50"),
+  scale = TRUE,
+  remove_inf = TRUE,
+  cluster.col = FALSE,
+  labels_annot_bar = TRUE,
+  label.only.disease = FALSE,
+  figure_Path = str_glue("{figurePath}Heatmap_Intermediate_macrophage_top_disease_DE_genes"),
+  save = F,
+  fig.width = 20,
+  fig.height = 32,
+  font = 35,
+  title.font = 35,
+  title.face = "bold",
+  fontface = "bold",
+  grid_width = 20,
+  legend_h = 20,
+  legend_w = 2,
+  grid_width1 = 2,
+  grid_height1 = 2,
+  title_g = 10, broadcell = "macrophages",
+  grid_width_row_annot = 8,
+  rowannot = T, path_title = "Pathways",
+  column.name.col = "grey20"
+)
+
+hp
+
+```
+
+### S100A macrophage
+
+```{r}
+S100A_macr_genes_up_RA = intersect(Mac_S100A8_prod_disease_program_Naïve_treat_RA$name[Mac_S100A8_prod_disease_program_Naïve_treat_RA$dirFC=="Up"],
+                                        Mac_S100A8_prod_disease_program_Resitant_treat_RA$name[Mac_S100A8_prod_disease_program_Resitant_treat_RA$dirFC=="Up"])
+
+S100A_macr_genes_up_CD = Mac_S100A8_gene_program_ileum_CD$name[Mac_S100A8_gene_program_ileum_CD$dirFC=="Up"]
+
+
+S100A_macr_genes_down_RA = intersect(Mac_S100A8_prod_disease_program_Naïve_treat_RA$name[Mac_S100A8_prod_disease_program_Naïve_treat_RA$dirFC=="Down"],
+                                        Mac_S100A8_prod_disease_program_Resitant_treat_RA$name[Mac_S100A8_prod_disease_program_Resitant_treat_RA$dirFC=="Down"])
+
+
+S100A_macr_genes_down_CD = Mac_S100A8_gene_program_ileum_CD$name[Mac_S100A8_gene_program_ileum_CD$dirFC=="Down"]
+```
+
+#### GSEA
+
+```{r}
+genelist = unique(c(S100A_macr_genes_up_RA, S100A_macr_genes_up_CD))
+
+genelist[1:5]
+```
+
+```{python}
+
+genelist = r.genelist 
+
+gene_sets=['MSigDB_Hallmark_2020']  
+
+enr = gp.enrichr(gene_list=genelist,gene_sets=gene_sets, organism='human', outdir=None) 
+
+enr.results
+
+enr1 = enr.results 
+
+
+# reactome
+
+enr = gp.enrichr(gene_list=genelist,gene_sets=['Reactome_2022'], organism='human', outdir=None) 
+
+enr.results
+
+enr2 = enr.results 
+
+#KEGG_2021_Human
+
+enr = gp.enrichr(gene_list=genelist,gene_sets=['KEGG_2021_Human'], organism='human', outdir=None) 
+
+enr.results
+
+enr3 = enr.results 
+
+```
+
+```{r}
+Hall_mark_s100= py$enr1 %>% arrange(desc(`Combined Score`))
+
+Reactome_s100= py$enr2 %>% arrange(desc(`Combined Score`))
+
+KEGG_2021_Human_s100 = py$enr3 %>% arrange(desc(`Combined Score`))
+```
+
+```{r}
+gsea_data = rbind(Reactome_s100[c(1,8,12,30),], Hall_mark_s100[c(1,3),], KEGG_2021_Human_s100[c(7,19,37,54),])
+
+gsea_data$Term = str_remove(gsea_data$Term, " R-HSA-.*$") %>% str_wrap(., 35)
+```
+
+```{r fig.fullwidth = TRUE, fig.width=10, fig.height=3}
+gsea_plot(gsea=gsea_data, n_top = NULL, x = "Term", y = "Combined Score", log_y = F, bar_plot = TRUE, save = FALSE, ylab="Combined score", xlab = "Hallmark GSEA")
+
+```
+
+```{r fig.width=9, fig.height=4}
+gsea_plot(
+  gsea = gsea_data,
+  n_top = NULL,
+  x = "Term",
+  y = "Combined Score",
+  log_y = F,
+  bar_plot = TRUE,
+  ylab = "Combined score",
+  xlab = "",
+  figure_Path = str_glue("{figurePath}/GSEA_Tissue_S100A_prod_Macr"),
+  save = FALSE,
+  fig.width = 9,
+  fig.height = 4,
+  axis.text = element_text(size = 18),
+  axis.title = element_text(size = 18),
+  #axis.line = element_line(linewidth = 1, colour = "black"),
+  axis.ticks = element_line(linewidth = 1)
+)
+
+```
+
+```{r}
+s100A_net =gsea_2_net(
+  gsea_res = gsea_data,
+  pval = "Adjusted P-value",
+  Combined.Score = "Combined Score",
+  pval.threshold = 0.05,
+  openTarget = NULL,
+  Number_genes = 1,
+  gsea_Path = str_glue("{figurePath}/GSEA_Tissue_S100A_prod_Macr")
+)
+```
+
+#### Heatmap
+#### Figure 2E
+
+```{r}
+selected_gene_S100A = unique(s100A_net$symbol)
+
+
+```
+
+```{r}
+intersect(S100A_macr_genes_up_CD, S100A_macr_genes_up_RA)
+```
+
+```{r}
+sort(intersect(S100A_macr_genes_down_CD, S100A_macr_genes_down_RA))
+```
+
+```{r}
+intersect(c("IL8", "TRPA1", "PTGS2", "MYOF", "FER1L6", "GPR32", "FPR2", "DYSF", "OTOF", "RELA", "CXR2", "CXR1", "TP53", "NFKB1", "AITC", "DARC", "PPARA", "ADIPOQ", "CXCL4", "CXCL12", "ARG1", "PDCD4", "TRPA1"), intersect(S100A_macr_genes_down_CD, S100A_macr_genes_down_RA))
+
+intersect(c("IL8", "TRPA1", "PTGS2", "MYOF", "FER1L6", "GPR32", "FPR2", "DYSF", "OTOF", "RELA", "CXR2", "CXR1", "TP53", "NFKB1", "AITC", "DARC", "PPARA", "ADIPOQ", "CXCL4", "CXCL12", "ARG1", "PDCD4", "TRPA1","CPEB4"), S100A_macr_genes_down_CD)
+```
+
+```{r}
+s100A_down = intersect(S100A_macr_genes_down_CD, S100A_macr_genes_down_RA)
+```
+
+```{python}
+
+s100A_down = r.s100A_down
+#KEGG_2021_Human
+
+enr = gp.enrichr(gene_list=s100A_down,gene_sets=['MSigDB_Hallmark_2020'], organism='human', outdir=None) 
+
+enr.results
+
+enr4 = enr.results 
+
+```
+
+```{r}
+gsea_down= py$enr4 %>% arrange(desc(`Combined Score`))
+```
+
+```{r fig.width=20, fig.height=27}
+
+
+test_adata_sub = test_adata_
+
+test_adata_prep = prep_de_data(depl_ = "", enrch_ = "", test_adata = test_adata_sub, nhood = FALSE, hvgs = FALSE, cel_of_int_vs_rest = T, cell_type = "Mac_S100A8_prod")
+
+
+test_adata_prep$Cell_bin = ifelse(test_adata_prep$Cell_type_scANVI == "Mac_S100A8_prod", "Mac_S100A8_prod", "Other") %>% 
+ str_replace(., "Mac_S100A8_prod", "S100A8+ \n macrophages") %>% as.factor()
+
+
+test_adata_prep$disease_short = str_replace(test_adata_prep$disease_short, "CD", "IBD") %>% as.factor()
+
+path_heatmap = c("TNF-alpha Signaling via NF-kB", "Interferon Gamma Response")
+
+#sort(unique(gsea_net$symbol[gsea_net$Term %in% path_heatmap]))
+
+s100_genes = c("G0S2","AQP9","ISG15","AREG","APOBEC3A",
+                    "BCL2A1","IFITM2", "S100A8","S100A9", "S100A12", "FPR2",
+                    "IFI30", "HELZ2", "MT2A",
+                    "NAMPT","SRGN", "FOSL2", "LYVE1",
+                    "CTSF", "SOCS2", "SREBF1", "NR1H3",
+                    "ANKH", "GADD45A", "TIMP2", "ATF3")
+
+
+# unique(s100A_net$symbol[s100A_net$Term %in% path_heatmap[2]])[unique(s100A_net$symbol[s100A_net$Term %in% path_heatmap[2]]) %in% c(
+#   "G0S2",
+#   "AQP9",
+#   "ISG15",
+#   "AREG",
+#   "APOBEC3A",
+#   "BCL2A1",
+#   "IFITM2",
+#   "S100A8",
+#   "S100A9",
+#   "S100A12",
+#   "FPR2",
+#   "IFI30",
+#   "HELZ2",
+#   "MT2A",
+#   "NAMPT",
+#   "SRGN",
+#   "FOSL2",
+#   "LYVE1",
+#   "CTSF",
+#   "SOCS2",
+#   "SREBF1",
+#   "NR1H3",
+#   "ANKH",
+#   "GADD45A",
+#   "TIMP2",
+#   "ATF3"
+# )]
+
+s100_genes = c(
+  "AREG",
+  "NAMPT",
+  "BCL2A1",
+  "G0S2",
+  "IFITM2",
+  "FPR1",
+  "IFI30",
+  "IFIT2",
+  "BCL2A1",
+  "HELZ2",
+  "VEGFA",
+  "IL1B",
+  "MT2A",
+  "NAMPT",
+  "ISG15",
+  "LYVE1",
+  "CTSF",
+  "SREBF1",
+  "NR1H3",
+  "ANKH",
+  "GADD45A",
+  "TIMP2",
+  "ATF3"
+)
+
+s100_gsea_net_heat = s100A_net[s100A_net$Term %in% path_heatmap, 1:2]
+
+s100_gsea_net_heat = rbind(s100_gsea_net_heat[s100_gsea_net_heat$symbol %in% s100_genes,],
+                           data.frame(
+                             Term = "Inflammation resolution",
+                             symbol = c(
+                               "LYVE1",
+                               "CTSF",
+                               "SREBF1",
+                               "NR1H3",
+                               "ANKH",
+                               "GADD45A",
+                               "TIMP2",
+                               "ATF3"
+                             )
+                           ))
+
+s100_gsea_net_heat$value = 1
+
+s100_gsea_net_heat = pivot_wider(s100_gsea_net_heat, names_from = Term, values_from = value, values_fill = 0)
+
+s100_gsea_net_heat = tibble::column_to_rownames(s100_gsea_net_heat, var="symbol")
+
+
+
+colors = structure(c("grey90", "grey35"), names = c(0,1))
+
+
+
+hp = plot_heatmap_wout_bar(
+  test_adata = test_adata_prep,
+  cel.selected = "Mac_S100A8_prod",
+  selected_gene = c("BCL2A1", rownames(s100_gsea_net_heat)[!(rownames(s100_gsea_net_heat) %in% c("IL1B","BCL2A1"))]),
+  gsea_net_heat = s100_gsea_net_heat,
+  n_top = 15,
+  aggregate = TRUE,
+  show_column_names = TRUE,
+  aggr_fun = "mean",
+  col_pal = vega_20,
+  test.column = "Cell_bin",
+  column.label = "disease_short",
+  col_test = c("grey", "grey50"),
+  scale = TRUE,
+  remove_inf = TRUE,
+  cluster.col = FALSE,
+  cluster.row = FALSE,
+  labels_annot_bar = TRUE,
+  label.only.disease = FALSE,
+  figure_Path = str_glue("{figurePath}Heatmap_Heatmap_S100A_prod_macrophage_top_disease_DE_genes"),
+  save = F,
+  fig.width = 20,
+  fig.height = 27,
+  font = 35,
+  title.font = 35,
+  title.face = "bold",
+  fontface = "bold",
+  grid_width = 20,
+  legend_h = 20,
+  legend_w = 2,
+  grid_width1 = 2,
+  grid_height1 = 2,
+  title_g = 10,
+  grid_width_row_annot = 8,
+  rowannot = T, 
+  path_title = "Pathways",
+  column.name.col = "grey35", broadcell = "macrophages"
+)
+
+hp
+
+```
+
+```{r fig.width=10, fig.height=3}
+levels(test_adata_$Cell_type_scANVI)
+
+test_adata_$disease_bin = ifelse(test_adata_$disease_short == "Healthy", "Healthy", "Diseases") %>% as.factor()
+
+
+plot_violin_facet(
+  sce = test_adata_,
+  gene = c("NR1H3", "GBP2", "GBP1", "KCNJ2", "KCNJ10"),
+  xlab = "",
+  ylab = "",
+  size = 3,
+  shape = 20,
+  cell_type = c("Mac_CX3CR1"),
+  gg_x = "disease_bin",
+  angle = 90,
+  colmap = vega_20,
+  base_size = 14,
+  base_line_size = 0.5,
+  base_family = "sans",
+  base_fontface = "bold",
+  legend.title = "Groups",
+  strip.colour = "black",
+  strip.fill = "grey80",
+  plot.title.position = "plot",
+  plot.title = "CX3CR1+ macrophages DEG (Disease vs Healthy)",
+  legend.position = "right",
+  ncol = 6,
+  show.x.text = FALSE,
+  figure_Path = str_glue(
+    "{figurePath}Boxplot_facet_Mac_CX3CR1_prod_macrophage_disease_DE_genes"
+  ),
+  fig.width = 8,
+  fig.height = 3,
+  save = F,
+  stat = TRUE,
+  stat.ref = "Healthy",
+  stat.method = "t.test",
+  stat.paired = FALSE,
+  label.y = NULL,
+  violin = F,
+  include_violin_boxplot = T,
+  violin_boxplot_w = 0.1
+)
+```
+
+
+# Umap Myeloid from tissue
+
+```{r}
+h5ad_path = 'C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/sanger_gdrive/Projects/SCVI_Results/All_Tissue_or_Nonimmune/Subset_Reintegrated_full/Milo/'
+obs = read.csv("C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/sanger_gdrive/Projects/SCVI_Results/All_Tissue_or_Nonimmune/Subset_Reintegrated_full/Milo/enriched_depleted_SCE/Macrophage_From_Tissue_Subset.csv")
+
+non_cmon_mat = read.csv(str_glue("{h5ad_path}Myeloid_From_Tissue_Non_cMon_mature.csv"))
+
+table(non_cmon_mat$X %in% compare_disease_df$index_cell)
+table(obs$X %in% non_cmon_mat$X)
+
+obs$Cell_type_scANVI = case_when(
+  obs$X %in% non_cmon_mat$X ~ "CD14+CD16+ Mon",
+  TRUE ~ obs$Cell_type_scANVI
+)
+
+obs$Cell_type_scANVI = ifelse(obs$Cell_type_scANVI%in%c("Mo-Mac", "Mo-Mac_CX3CR1"), "Mac CX3CR1+", obs$Cell_type_scANVI)
+
+obs$Cell_type_scANVI = str_replace(obs$Cell_type_scANVI, "Mo-Mac", "Mac")
+
+obs$Cell_type_scANVI = str_replace(obs$Cell_type_scANVI, "Intermediate macrophage", "IL1B high macrophage")
+
+umap = read.csv("C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/sanger_gdrive/Projects/SCVI_Results/All_Tissue_or_Nonimmune/Subset_Reintegrated_full/Milo/enriched_depleted_SCE/Obs_Myeloid_From_Tissue_label_transfert_Subset_annotated_Milo_3K_with_UMAP.csv")
+
+table(umap$X %in% non_cmon_mat$X)
+
+umap$Cell_type_scANVI = case_when(
+  umap$X %in% non_cmon_mat$X ~ "CD14+CD16+ Mon",
+  TRUE ~ umap$Cell_type_scANVI
+)
+
+umap$Cell_type_scANVI = ifelse(umap$Cell_type_scANVI%in%c("Mo-Mac", "Mo-Mac_CX3CR1"), "Mac CX3CR1+", umap$Cell_type_scANVI)
+
+umap$Cell_type_scANVI = str_replace(umap$Cell_type_scANVI, "Mo-Mac", "Mac")
+
+umap$Cell_type_scANVI = str_replace(umap$Cell_type_scANVI, "Intermediate macrophage", "IL1B high macrophage")
+```
+
+```{r fig.width= 10, fig.height=7}
+umap %>% filter(Cell_type_scANVI != "Unknown") %>% 
+  ggplot(aes(x=umap1, y=umap2, color = Cell_type_scANVI)) +
+  geom_point() +
+  scale_colour_manual(values = color_cell_tissue)
+  
+```
+
+```{r fig.width= 7.5, fig.height=7.5}
+plot_umap(
+  umap_data = umap,
+  cluster = "Cell_type_scANVI",
+  umap_1 = "umap1",
+  umap_2 = "umap2",
+  selected_clusters = c(
+    "Mac MERTK_hi_TREM2_low",
+    "Mac S100A8 prod",
+    "CD14+CD16+ Mon",
+    "IL1B high macrophage",
+    "Mac LYVE1+",
+    "Mac NUPR1_TREM2_hi",
+    "Mac CX3CR1+"
+  ),
+  shape.size = 0.5,
+  cluster_palette = color_cell_tissue,
+  arrow.length = 5,
+  repel_text_size = 5, axis.lab.size = 5,
+)
+
+
+ggsave(
+  str_glue(
+    "{figurePath}Umap_Milo_myel_From_Tissue_Only_Mac_MERTK_hi_TREM2_low__Mac_S100A8_prod__Intermediate_macrophage__Mo-Mac_LYVE1_plus__Mac NUPR1_TREM2_hi__Mo-Mac_CX3CR1.png"
+  ),
+  width = 7.5,
+  height = 7.5,
+  bg = 'transparent'
+) 
+
+ggsave(
+  str_glue(
+    "{figurePath}Umap_Milo_myel_From_Tissue_Only_Mac_MERTK_hi_TREM2_low__Mac_S100A8_prod__Intermediate_macrophage__Mo-Mac_LYVE1_plus__Mac NUPR1_TREM2_hi__Mo-Mac_CX3CR1.svg"
+  ),
+  width = 7.5,
+  height = 7.5,
+  bg = 'transparent'
+)
+
+
+
+  
+```
+### Figure 2A
+
+```{r fig.width= 9, fig.height=8}
+plot_umap(
+  umap_data = umap[umap$Cell_type_scANVI!="Unknown",],
+  cluster = "Cell_type_scANVI",
+  umap_1 = "umap1",
+  umap_2 = "umap2",
+  selected_clusters = "all",
+  shape.size = 0.5,
+  cluster_palette = color_cell_tissue,
+  arrow.length = 5,
+  axis.lab.size = 6,
+  repel_text_size = 5,
+  repel = "label",
+  cust.alpha = 0.7
+)
+
+
+
+ggsave(
+  str_glue(
+    "{figurePath}Umap_Milo_myel_From_Tissue_all.svg"
+  ),
+  width = 9,
+  height = 8,
+  bg = 'transparent'
+)
+
+
+ggsave(
+  str_glue(
+    "{figurePath}Umap_Milo_myel_From_Tissue_all.png"
+  ),
+  width = 9,
+  height = 8,
+  bg = 'transparent'
+)
+  
+```
+### Figure S3: UMAP embedding of macrophages and their differentially abundant neighborhoods
+```{r}
+#h5ad_path = 'C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/sanger_gdrive/Projects/SCVI_Results/All_Tissue_or_Nonimmune/Subset_Reintegrated_full/Milo/'
+
+Nhood_Graph_df = read.csv(str_glue("{h5ad_path}Myeloid_From_Tissue_label_transfer_Milo_3K_reajusted_Nhood_Graph.csv"))
+
+
+compare_disease_df = read.csv(str_glue("{h5ad_path}Myeloid_From_Tissue_label_transfer_Milo_3K_reajusted.csv"))
+
+
+compare_disease_df$nhood_annotation = case_when(
+  compare_disease_df$index_cell %in% non_cmon_mat$X ~ "CD14+CD16+ Mon",
+  TRUE ~ compare_disease_df$nhood_annotation
+)
+
+
+Nhood_Graph_df = compare_disease_df %>% dplyr::select(index_cell, nhood_annotation) %>% unique() %>% 
+  inner_join(Nhood_Graph_df, by = "index_cell")
+
+
+Nhood_Graph_df$nhood_annotation = ifelse(Nhood_Graph_df$nhood_annotation%in%c("Mo-Mac", "Mo-Mac_CX3CR1"), "Mac CX3CR1+", Nhood_Graph_df$nhood_annotation)
+
+Nhood_Graph_df$nhood_annotation = str_replace(Nhood_Graph_df$nhood_annotation, "Mo-Mac", "Mac")
+
+Nhood_Graph_df$nhood_annotation = str_replace(Nhood_Graph_df$nhood_annotation, "Intermediate macrophage", "IL1B high macrophage")
+
+unique(Nhood_Graph_df$nhood_annotation)
+
+#### Prepare data
+
+
+Nhood_Graph_df_2 = Nhood_Graph_df[Nhood_Graph_df$disease_short %in% c('CD_colon', 'Uninfl_CD_colon', 'CD_ileum', 'Resitant_treat_RA_syno_membr', 'Remission_RA_syno_membr', 'Naïve_treat_RA_syno_membr'), ]
+
+
+Nhood_Graph_df_2 = Nhood_Graph_df_2[!(Nhood_Graph_df_2$nhood_annotation %in% c('DC1', 'DC2', 'pDC', 'Mast cell', 'Mig DC', 'Cycling', 'Unknown')), ]
+
+Nhood_Graph_df_2$nhood_annotation = ifelse(Nhood_Graph_df_2$nhood_annotation%in%c("Mo-Mac", "Mo-Mac_CX3CR1"), "Mac CX3CR1+", Nhood_Graph_df_2$nhood_annotation)
+
+Nhood_Graph_df_2$nhood_annotation = str_replace(Nhood_Graph_df_2$nhood_annotation, "Mo-Mac", "Mac")
+
+Nhood_Graph_df_2$nhood_annotation = str_replace(Nhood_Graph_df_2$nhood_annotation, "Intermediate macrophage", "IL1B high macrophage")
+
+Nhood_Graph_df_2$disease_short = str_replace(Nhood_Graph_df_2$disease_short, "CD", "IBD") %>% as.factor()
+
+unique(Nhood_Graph_df_2$disease_short)
+```
+
+```{r fig.width= 12, fig.height=12}
+
+nplot = plot_umap(
+  umap_data = Nhood_Graph_df_2,
+  cluster = "nhood_annotation",
+  umap_1 = "nhood_graph1",
+  umap_2 = "nhood_graph2",
+  UMAP_1_lab = "Nhood Graph_1",
+  UMAP_2_lab = "Nhood Graph_2",
+  selected_clusters = c(
+    "Mac MERTK_hi_TREM2_low",
+    "Mac S100A8 prod",
+    "CD14+CD16+ Mon",
+    "IL1B high macrophage",
+    "Mac LYVE1+",
+    "Mac NUPR1_TREM2_hi",
+    "Mac CX3CR1+"
+  ),
+  shape.size = 4,
+  cluster_palette = color_cell_tissue,
+  arrow.length = 6, axis.lab.size = 10, 
+  repel_text_size = 12,
+  repel = "label",
+  font = "bold",
+  cust.alpha = 0.7
+)
+
+nplot
+
+
+ggsave(
+  str_glue(
+    "{figurePath}Nhood_graph_Milo_myel_From_Tissue_Only_Mac_MERTK_hi_TREM2_low__Mac_S100A8_prod__Intermediate_macrophage__Mo-Mac_LYVE1_plus__Mac NUPR1_TREM2_hi__Mo-Mac_CX3CR1.svg"
+  ),
+  width = 12,
+  height = 12,
+  bg = 'transparent'
+)
+
+
+ggsave(
+  str_glue(
+    "{figurePath}Nhood_graph_Milo_myel_From_Tissue_Only_Mac_MERTK_hi_TREM2_low__Mac_S100A8_prod__Intermediate_macrophage__Mo-Mac_LYVE1_plus__Mac NUPR1_TREM2_hi__Mo-Mac_CX3CR1.png"
+  ),
+  width = 12,
+  height = 12,
+  bg = 'transparent'
+)
+
+```
+
+```{r fig.width= 12, fig.height=18}
+
+gg = plot_nhood_graph(
+  nhood_data = Nhood_Graph_df_2,
+  cluster = "nhood_annotation",
+  nhood_1 = "nhood_graph1",
+  nhood_2 = "nhood_graph2",
+  NHOOD_1_lab = "Nhood \nGraph_1",
+  NHOOD_2_lab = "Nhood \nGraph_2",
+  selected_clusters = c(
+    "Mac MERTK_hi_TREM2_low",
+    "Mac S100A8 prod",
+    "CD14+CD16+ Mon",
+    "IL1B high macrophage",
+    "Mac LYVE1+",
+    "Mac NUPR1_TREM2_hi",
+    "Mac CX3CR1+"
+  ),
+  shape.size = 1.5,
+  repel_text_size = 2,
+  cluster_palette = color_cell_tissue,
+  arrow.length = 3,
+  font = "bold",
+  FC = TRUE,
+  logFC = "logFC",
+  FC_dir = "enriched_depleted",
+  ncol = 2,
+  plot.title = element_text(size = 25, face = "bold"),
+  legend.text = element_text(size = 24),
+  legend.title = element_text(size = 25, face = "bold")
+)
+
+
+gg
+
+ggsave(
+  str_glue(
+    "{figurePath}Nhood_graph_facet_Milo_myel_From_Tissue_Only_Mac_MERTK_hi_TREM2_low__Mac_S100A8_prod__Intermediate_macrophage__Mo-Mac_LYVE1_plus__Mac NUPR1_TREM2_hi__Mo-Mac_CX3CR1.svg"
+  ),
+  width = 12,
+  height = 18,
+  bg = 'transparent'
+)
+
+
+ggsave(
+  str_glue(
+    "{figurePath}Nhood_graph_facet_Milo_myel_From_Tissue_Only_Mac_MERTK_hi_TREM2_low__Mac_S100A8_prod__Intermediate_macrophage__Mo-Mac_LYVE1_plus__Mac NUPR1_TREM2_hi__Mo-Mac_CX3CR1.png"
+  ),
+  width = 12,
+  height = 18,
+  bg = 'transparent'
+)
+
+```
+
+```{r fig.width= 15, fig.height=10}
+
+gg = plot_nhood_graph(
+  nhood_data = Nhood_Graph_df_2,
+  cluster = "nhood_annotation",
+  nhood_1 = "nhood_graph1",
+  nhood_2 = "nhood_graph2",
+  NHOOD_1_lab = "Nhood \nGraph_1",
+  NHOOD_2_lab = "Nhood \nGraph_2",
+  selected_clusters = c(
+    "Mac MERTK_hi_TREM2_low",
+    "Mac S100A8 prod",
+    "Intermediate macrophage",
+    "Mac LYVE1+",
+    "Mac NUPR1_TREM2_hi",
+    "Mac CX3CR1+"
+  ),
+  shape.size = 1.5,
+  repel_text_size = 2,
+  cluster_palette = color_cell_tissue,
+  arrow.length = 3,
+  font = "bold",
+  FC = TRUE,
+  logFC = "logFC",
+  FC_dir = "enriched_depleted",
+  ncol = 3,
+  plot.title = element_text(size = 18, face = "bold"),
+  legend.text = element_text(size = 18),
+  legend.title = element_text(size = 18, face = "bold")
+)
+
+
+gg
+
+
+# ggsave(
+#   str_glue(
+#     "{figurePath}Nhood_graph_facet_3row_myel_From_Tissue_Only_Mac_MERTK_hi_TREM2_low__Mac_S100A8_prod__Intermediate_macrophage__Mo-Mac_LYVE1_plus__Mac NUPR1_TREM2_hi__Mo-Mac_CX3CR1.svg"
+#   ),
+#   width = 15,
+#   height = 10,
+#   bg = 'transparent'
+# )
+
+
+ggsave(
+  str_glue(
+    "{figurePath}Nhood_graph_facet_3row_myel_From_Tissue_Only_Mac_MERTK_hi_TREM2_low__Mac_S100A8_prod__Intermediate_macrophage__Mo-Mac_LYVE1_plus__Mac NUPR1_TREM2_hi__Mo-Mac_CX3CR1.png"
+  ),
+  width = 15,
+  height = 10,
+  bg = 'transparent'
+)
+
+```

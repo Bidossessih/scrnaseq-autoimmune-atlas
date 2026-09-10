@@ -1,0 +1,141 @@
+---
+title: "Untitled"
+format: html
+editor: visual
+---
+
+```{r}
+library(tidyverse)
+library(openxlsx)
+```
+
+```{r}
+degPathEnriched = "C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/sanger_gdrive/Projects/SCVI_Results/DEG/Enriched/"
+
+degPathDepleted = "C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/sanger_gdrive/Projects/SCVI_Results/DEG/Depleted/"
+
+```
+
+## Suppl Table S2 - IL1B Macrophage DEG
+
+```{r}
+
+
+int_macr_disease_program_Naïve_treat_RA <-
+  read.csv(
+    str_glue(
+      "{degPathEnriched}Results_DE_IL1B_high_macr_vs_other_Naïve_treat_RA.csv"
+    ), row.names = 1
+  )
+
+int_macr_disease_program_Resitant_treat_RA<-
+  read.csv(str_glue("{degPathEnriched}Results_DE_IL1B_high_macr_vs_other_Resitant_treat_RA.csv"),row.names = 1)
+
+
+int_macr_gene_program_ileum_CD<-
+  read.csv(str_glue("{degPathEnriched}Results_DE_IL1B_high_macr_vs_other_ileum_CD.csv"),row.names = 1)
+
+
+int_macr_disease_program_colon_CD<-
+  read.csv(str_glue("{degPathEnriched}Results_DE_IL1B_high_macr_vs_other_colon_CD.csv"),row.names = 1)
+```
+
+```{r}
+int_macr_genes_up_RA = unique(int_macr_disease_program_Naïve_treat_RA$name[int_macr_disease_program_Naïve_treat_RA$dirFC=="Up"],
+                                        int_macr_disease_program_Resitant_treat_RA$name[int_macr_disease_program_Resitant_treat_RA$dirFC=="Up"])
+
+int_macr_genes_up_CD = intersect(int_macr_disease_program_colon_CD$name[int_macr_disease_program_colon_CD$dirFC=="Up"],
+                                        int_macr_gene_program_ileum_CD$name[int_macr_gene_program_ileum_CD$dirFC=="Up"])
+
+
+Shared_IL1B_Macr_up = data.frame(name=unique(int_macr_genes_up_RA, int_macr_genes_up_CD))
+
+# Shared_IL1B_Macr_up = rbind(
+#   data.frame(inner_join(Shared_IL1B_Macr_up, int_macr_disease_program_colon_CD[,c(1,3,7)]), Tissue = "Colon_IBD"),
+#   data.frame(inner_join(Shared_IL1B_Macr_up, int_macr_disease_program_Naïve_treat_RA[,c(1,3,7)]), Tissue = "Naïve_treat_RA"),
+#   data.frame(inner_join(Shared_IL1B_Macr_up, int_macr_disease_program_Resitant_treat_RA[,c(1,3,7)]), Tissue = "Resitant_treat_RA"),
+#   data.frame(inner_join(Shared_IL1B_Macr_up, int_macr_gene_program_ileum_CD[,c(1,3,7)]), Tissue = "Ileum_IBD")
+#   )
+
+```
+
+
+
+
+```{r}
+wb <- createWorkbook()
+addWorksheet(wb = wb, sheetName = "Shared genes")
+writeData(wb = wb, sheet = "Shared genes", x = Shared_IL1B_Macr_up)
+
+addWorksheet(wb = wb, sheetName = "DEG_colon_CD")
+writeData(wb = wb, sheet = "DEG_colon_CD", x = int_macr_disease_program_colon_CD)
+
+
+addWorksheet(wb = wb, sheetName = "DEG_ileum_CD")
+writeData(wb = wb, sheet = "DEG_ileum_CD", x = int_macr_gene_program_ileum_CD)
+
+
+addWorksheet(wb = wb, sheetName = "DEG_naive_RA")
+writeData(wb = wb, sheet = "DEG_naive_RA", x = int_macr_disease_program_Naïve_treat_RA)
+
+addWorksheet(wb = wb, sheetName = "DEG_resistant_RA")
+writeData(wb = wb, sheet = "DEG_resistant_RA", x = int_macr_disease_program_Resitant_treat_RA)
+
+
+saveWorkbook(wb, "C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/sanger_gdrive/Projects/Paper/HCA/Paper/Draft/Table_S2.xlsx", overwrite = TRUE) 
+```
+
+
+## Suppl Table S3 - Mac_S100A8_prod resistance vs remission
+
+```{r}
+
+Mac_S100A8_Remission_vs_Resistant = 
+          read.csv(str_glue("{degPathEnriched}Results_DE_Mac_S100A8_Remission_vs_Resistant.csv"),
+                   row.names = 1)
+
+wb_S3 <- createWorkbook()
+addWorksheet(wb = wb_S3, sheetName = "DEG_RA_Remission_Resistant")
+writeData(wb = wb_S3, sheet = "DEG_RA_Remission_Resistant", x = Mac_S100A8_Remission_vs_Resistant)
+saveWorkbook(wb_S3, "C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/sanger_gdrive/Projects/Paper/HCA/Paper/Draft/Table_S3.xlsx", overwrite = TRUE)
+```
+
+## Suppl Table S4 - Mac_S100A8_prod vs all
+
+```{r}
+Results_DE_shared_S100A_macr_RA_IBD <- read_csv(str_glue("{degPathEnriched}Shared/Results_DE_shared_S100A_macr_RA_IBD.csv"))
+Results_DE_shared_S100A_macr_RA_IBD <- Results_DE_shared_S100A_macr_RA_IBD[, 2, drop=FALSE]
+View(Results_DE_shared_S100A_macr_RA_IBD)
+```
+
+
+```{r}
+wb <- createWorkbook()
+addWorksheet(wb = wb, sheetName = "S100A8_Shared_upregulated_genes")
+writeData(wb = wb, sheet = "S100A8_Shared_upregulated_genes", x = Results_DE_shared_S100A_macr_RA_IBD)
+
+#Results_DE_Mac_S100A8_gene_program_ileum_CD_vs_other
+Results_DE_Mac_S100A8_gene_program_ileum_CD_vs_other <- read_csv(str_glue("{degPathEnriched}Results_DE_Mac_S100A8_gene_program_ileum_CD_vs_other.csv"))
+
+addWorksheet(wb = wb, sheetName = "S100A8_DEG_ileum_CD")
+writeData(wb = wb, sheet = "S100A8_DEG_ileum_CD", x = Results_DE_Mac_S100A8_gene_program_ileum_CD_vs_other[,-1])
+
+
+#Results_DE_Mac_S100A8_prod_vs_other_Remission_treat_RA
+Results_DE_Mac_S100A8_prod_vs_other_Remission_treat_RA <- read_csv(str_glue("{degPathEnriched}Results_DE_Mac_S100A8_prod_vs_other_Remission_treat_RA.csv"))
+addWorksheet(wb = wb, sheetName = "S100A8_DEG_Remission_CD")
+writeData(wb = wb, sheet = "S100A8_DEG_Remission_CD", x = Results_DE_Mac_S100A8_prod_vs_other_Remission_treat_RA[,-1])
+
+#Results_DE_Mac_S100A8_prod_macr_vs_other_Naïve_treat_RA
+Results_DE_Mac_S100A8_prod_macr_vs_other_Naïve_treat_RA <- read_csv(str_glue("{degPathEnriched}Results_DE_Mac_S100A8_prod_macr_vs_other_Naïve_treat_RA.csv"))
+addWorksheet(wb = wb, sheetName = "S100A8_DEG_naive_RA")
+writeData(wb = wb, sheet = "S100A8_DEG_naive_RA", x = Results_DE_Mac_S100A8_prod_macr_vs_other_Naïve_treat_RA[,-1])
+
+#Results_DE_Mac_S100A8_prod_vs_other_Resitant_treat_RA
+Results_DE_Mac_S100A8_prod_vs_other_Resitant_treat_RA <- read_csv(str_glue("{degPathEnriched}Results_DE_Mac_S100A8_prod_vs_other_Resitant_treat_RA.csv"))
+addWorksheet(wb = wb, sheetName = "S100A8_DEG_resistant_RA")
+writeData(wb = wb, sheet = "S100A8_DEG_resistant_RA", x = Results_DE_Mac_S100A8_prod_vs_other_Resitant_treat_RA[,-1])
+
+
+saveWorkbook(wb, "C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/sanger_gdrive/Projects/Paper/HCA/Paper/Draft/Table_S4.xlsx", overwrite = TRUE) 
+```

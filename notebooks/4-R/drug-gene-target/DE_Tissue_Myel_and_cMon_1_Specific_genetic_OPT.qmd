@@ -1,0 +1,718 @@
+---
+title: "DE_Milo_Tissue_Myeloid Network expansion"
+author: "Bidossessi Hounkpe"
+date: "05/12/2025"
+format: html
+editor: visual
+---
+
+```{r}
+rm(list=ls())
+```
+
+## Disease summary
+
+```{r}
+pacman::p_load(
+  OmnipathR,
+  igraph,
+  ggraph,
+  graphlayouts,
+  ggforce,
+  tidygraph,
+  httr,
+  SingleCellExperiment,
+  scran,
+  scuttle,
+  ggprism,
+  ComplexHeatmap,
+  pheatmap,
+  circlize,
+  reticulate,
+  biomaRt,
+  ghql,
+  jsonlite,
+  tidyverse,
+  RColorBrewer
+)
+
+#Use conda env for reticulate
+use_condaenv("ScGwas", required = TRUE)
+#colors
+
+#source("/mnt/c/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/scripts/autoimmuneSC/Integrated/R/colors.R")
+
+# Source helper functions
+
+#source("/mnt/c/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/scripts/autoimmuneSC/Integrated/R/helper_fun.R")
+
+# Network expansion 
+
+#source("/mnt/c/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/scripts/autoimmuneSC/Integrated/R/openTarget.R")
+
+#### Windows
+source("C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/scripts/autoimmuneSC/Integrated/R/colors.R")
+
+# Source helper functions
+
+source("C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/scripts/autoimmuneSC/Integrated/R/helper_fun.R")
+
+# Network expansion 
+
+source("C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/scripts/autoimmuneSC/Integrated/R/openTarget.R")
+
+source("C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/scripts/autoimmuneSC/Integrated/R/chembl.R")
+
+```
+
+```{python}
+import os,sys
+import numpy as np
+import pandas as pd
+#import drug2cell as d2c
+#import scanpy as sc
+import sctk
+#import gc
+#sys.path.append("/mnt/c/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/scripts/autoimmuneSC/AIID_notebooks/")
+
+sys.path.append("C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/scripts/autoimmuneSC/AIID_notebooks/")
+
+from inflapy.immunoFunc import *
+import gseapy as gp
+```
+
+```{r}
+#figurePath = "/mnt/g/My Drive/Projects/SCVI_Results/All_Tissue_or_Nonimmune/Subset_Reintegrated_full/Figures/"
+
+figurePath = "C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/sanger_gdrive/Projects/SCVI_Results/All_Tissue_or_Nonimmune/Subset_Reintegrated_full/Figures/"
+```
+
+```{r}
+efo_disease_genetic = read.csv("C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/sanger_gdrive/Projects/SCVI_Results/GWAS_assoc/Efo_disease_genesAssoc.csv")
+
+# EFO codes for autoimmune diseases
+efo_codes <- c(
+  IBD = "EFO_0003767",
+  Rheumatoid_Arthritis = "EFO_0000685",
+  JIA = "EFO_0002609",
+  Sjogren_Syndrome = "EFO_0000699",
+  spondyloarthropathy = "EFO_0000706",
+  Hashimoto_Thyroiditis = "EFO_0003779",
+  SLE = "MONDO_0007915",
+  Psoriatic_Arthritis = "EFO_0003778",
+  Atopic_Dermatitis = "EFO_0000274",
+  Eczematoid_dermatitis = "HP_0000964"
+)
+
+# Use with the function
+efo_disease_genetic_results <- get_opentargets_overall_association(
+  efo_codes = unname(efo_codes),
+  score_threshold = 0,
+  page_size = 3000
+)
+
+efo_disease_genetic_results$is_truth = ifelse(
+  efo_disease_genetic_results$genetic_association_score > 0 & !is.na(efo_disease_genetic_results$genetic_association_score),
+  1, 0
+)
+
+IL1B_macr_up = read.csv("C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/sanger_gdrive/Projects/SCVI_Results/DEG/Enriched/Shared/Results_DE_shared_ILB_Mac_RA_IBD.csv")
+
+IL1B_macr_up = IL1B_macr_up[,-1]
+
+colnames(IL1B_macr_up)[1] = "gene_symbol"
+
+IL1B_macr_up = inner_join(IL1B_macr_up, efo_disease_genetic_results, by = "gene_symbol")
+
+IL1B_macr_up <- IL1B_macr_up %>% mutate(
+  disease_name_clean = case_when(
+    disease_name == "inflammatory bowel disease" ~ "IBD",
+    disease_name == "juvenile idiopathic arthritis" ~ "JIA",
+    disease_name == "rheumatoid arthritis" ~ "RA",
+    disease_name == "atopic eczema" ~ "Atopic Eczema",
+    disease_name == "spondyloarthropathy" ~ "Spondyloarthritis",
+    disease_name == "systemic lupus erythematosus" ~ "SLE",
+    disease_name == "Sjogren syndrome" ~ "Sjögren syndrome",
+    disease_name == "Eczematoid dermatitis" ~ "Atopic Eczema",
+    TRUE ~ disease_name
+    
+  )
+)
+
+IL1B_macr_up_wide = pivot_wider(unique(IL1B_macr_up[,c(1,14,13)]), names_from = disease_name_clean, values_from = is_truth, values_fill = 0, values_fn = max)
+
+IL1B_macr_up_wide = tibble::column_to_rownames(IL1B_macr_up_wide, var = "gene_symbol")
+
+IL1B_macr_up_wide = IL1B_macr_up_wide[rowSums(IL1B_macr_up_wide) != 0,]
+
+IL1B_macr_up_wide = IL1B_macr_up_wide[, colSums(IL1B_macr_up_wide) != 0]
+```
+
+```{r fig.width=10, fig.height=29}
+
+
+heat_m = Heatmap(IL1B_macr_up_wide,
+        cluster_columns = F,
+        name = "Genetic Association",
+        col = structure(c("grey80", "grey25"), names = c(0, 1)),
+        width = ncol(IL1B_macr_up_wide) * unit(10, "mm"),
+        height = nrow(IL1B_macr_up_wide) * unit(10, "mm"),
+        show_row_dend = T,
+        row_names_side = "right",
+        rect_gp = gpar(col = "white"),
+        row_dend_width = unit(3, "cm"),
+        row_dend_gp = gpar(lwd =3),
+        heatmap_legend_param = list(
+        title_gp = gpar(fontsize = 25, fontface = "bold"),
+        labels_gp = gpar(fontsize = 25),
+        at = c(0, 1), 
+        labels = c("NO", "Yes"),
+        grid_width = unit(12, "mm"),
+        grid_height = unit(12, "mm"),
+        title_gap = unit(5, "mm"),
+        direction = "horizontal"),
+      row_names_gp = gpar(fontsize = 25),
+      column_names_gp = gpar(fontsize = 25),
+      column_title_gp = gpar(fontsize = 30, fontface = "bold"),
+      column_title = expression(IL1B^high ~ macrophages))
+
+#heat_m = ggplotify::as.ggplot(heat_m)
+  
+draw(heat_m, heatmap_legend_side = "right")
+
+```
+
+```{r}
+
+svg(str_glue("{figurePath}Heatmap_IL1B_Macr_up_Genetic_OPT_Mac_2025.svg"), width = 10, height = 29)
+draw(heat_m, heatmap_legend_side = "right")
+dev.off()
+
+
+```
+
+### Data loading and preparation
+
+```{r}
+
+sce_path = "C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/sanger_gdrive/Projects/SCVI_Results/All_Tissue_or_Nonimmune/Subset_Reintegrated_full/Milo/enriched_depleted_SCE/"
+
+# 
+
+load(str_glue("{sce_path}Pseudo_test_adata_individual_disease_Myel_Tissue_reajusted.RData"))
+
+test_adata_$Cell_type_scANVI = as.character(test_adata_$Cell_type_scANVI)
+
+test_adata_ = test_adata_[, test_adata_$Cell_type_scANVI != "Unknown"]
+
+test_adata_$Cell_type_scANVI = gsub(" ", "_", test_adata_$Cell_type_scANVI) %>% factor()
+
+test_adata_$Cell_type_scANVI = gsub("[:+:]", "_plus", test_adata_$Cell_type_scANVI) %>% factor()
+
+test_adata_$Cell_type_scANVI = gsub("-", "_", test_adata_$Cell_type_scANVI) %>% factor()
+
+test_adata_$donor_id = factor(gsub(" ", "_", test_adata_$donor_id))
+
+test_adata_$donor_id = factor(gsub("-", "_", test_adata_$donor_id))
+
+test_adata_$disease_short = droplevels(test_adata_$disease_short)
+
+test_adata_$Cell_type_scANVI = str_replace(test_adata_$Cell_type_scANVI, "Mo_Mac$", "Mac_CX3CR1")
+
+test_adata_$Cell_type_scANVI = str_replace(test_adata_$Cell_type_scANVI, "Mo_Mac", "Mac")
+
+test_adata_$Cell_type_scANVI = str_replace(test_adata_$Cell_type_scANVI, "Intermediate_macrophage", "IL1B_macrophage")
+
+unique(test_adata_$Cell_type_scANVI)
+```
+
+```{r}
+
+test_adata_$tissue = gsub( " ", "_", test_adata_$tissue)
+
+test_adata_$tissue_disease = paste0(test_adata_$tissue, "_", test_adata_$disease_short) %>% factor()
+
+
+test_adata_$tissue_disease = str_replace(test_adata_$tissue_disease, "Ileum_CD", "ileum_CD") %>% factor()
+
+
+levels(test_adata_$tissue_disease)
+
+
+```
+
+```{r}
+gene_expressed = psdobkl2expressed(scedata = test_adata_, min.count=10, sample.size.percent = 0.1)
+
+# Download protein-protein interactions
+
+interactions = OmnipathR::import_omnipath_interactions() %>% as_tibble()
+
+# Convert to igraph objects:
+
+OPI_g = interaction_graph(interactions = interactions)
+```
+
+## RA and CD signature in intermediate macrophage
+
+```{r}
+
+IL1B_macr_up_wide_2 = IL1B_macr_up_wide
+
+IL1B_macr_up_wide_2 = IL1B_macr_up_wide_2 %>% mutate(Origin = paste0("Genetic_Assoc_in_", rowSums(IL1B_macr_up_wide_2)),
+                             Score = rowSums(IL1B_macr_up_wide_2)/ncol(IL1B_macr_up_wide_2))
+
+IL1B_macr_up_wide_2 = tibble::rownames_to_column(IL1B_macr_up_wide_2, var = "name")
+
+net = disease2net(
+  graph = OPI_g,
+  poi.meta = IL1B_macr_up_wide_2[,c(1,11,12)],
+  exclude = NULL,
+  intermediate = FALSE,
+  include = gene_expressed,
+  walk.step = 3,
+  min.gene.cluster = 5
+)
+```
+
+```{r}
+plot_net = ggraph(net, layout = "fr") +
+  geom_edge_link0(width=0.2, colour = "gray90", alpha = 0.5) +
+  scale_color_brewer(palette = "Paired") +
+  geom_edge_fan(aes(alpha = after_stat(index)), show.legend = FALSE) +
+  geom_node_point(aes(color = cwt, size = page.rank)) +
+  geom_node_text(aes(label = name), repel = TRUE) +
+  theme_graph()
+
+
+plot_net
+
+ggsave(str_glue("{figurePath}Tissue_IntermediateMacr_RA_top5_ranked_Modules_2025.svg"), bg='transparent')
+```
+
+### Open network in cytoscape
+
+```{r}
+library(RCy3)
+library(dplyr)
+library(igraph)
+```
+
+```{r}
+cytoscapePing()
+```
+
+```{r}
+
+createNetworkFromIgraph(net, "Tissue_IntermediateMacr_RA_CD_from_geneticOPT_2025")
+
+```
+
+## Known drug targets
+
+```{r}
+#library(biomaRt)
+#known_drugs_subnet_RA_CD = gene2knowndrugs(geneid = as_ids(V(net)), ensId = FALSE)
+
+
+known_drugs_subnet_RA_CD <- map_df(unique(IL1B_macr_up_wide_2$name), function(g) {
+  Sys.sleep(0.5)
+  tryCatch(get_opentargets_comprehensive(g), error = function(e) {
+    message("  Error: ", e$message)
+    NULL
+  })
+})
+```
+
+### Phase 4 Drug → Gene → Indication
+
+```{r}
+
+known_drugs_subnet_RA_CD_unique = known_drugs_subnet_RA_CD %>% mutate(
+  known_drugs = case_when(is.na(drug_name) ~ "Unknown",
+                          TRUE ~ "Known drugs") 
+)
+
+known_drugs_subnet_RA_CD_unique_approved = known_drugs_subnet_RA_CD_unique %>% 
+  select(gene, drug_name, drug_type, indication, phase_for_indication) %>% 
+  filter(phase_for_indication == 4) %>% 
+  mutate(drug_gene = paste(drug_name, gene, sep = "->")) %>% unique() %>% mutate(value = 1)
+
+known_drugs_subnet_RA_CD_unique_approved_mat = known_drugs_subnet_RA_CD_unique_approved %>%
+  select(drug_gene, indication, value) %>% unique() %>% 
+  pivot_wider(names_from = "drug_gene", values_from = "value", values_fill = 0) %>% 
+  tibble::column_to_rownames(var = "indication")
+
+rownames(known_drugs_subnet_RA_CD_unique_approved_mat) = gsub(",", "\n", rownames(known_drugs_subnet_RA_CD_unique_approved_mat))
+#known_drugs_subnet_RA_CD_unique = known_drugs_subnet_RA_CD_unique[,c(1,3,5,8)]
+```
+
+```{r fig.width=45, fig.height=30}
+
+
+heat_m_drug = Heatmap(t(known_drugs_subnet_RA_CD_unique_approved_mat),
+        cluster_columns = T,
+        name = "Indication",
+        col = structure(c("grey80", "grey25"), names = c(0, 1)),
+        width = nrow(known_drugs_subnet_RA_CD_unique_approved_mat) * unit(18, "mm"),
+        height = ncol(known_drugs_subnet_RA_CD_unique_approved_mat) * unit(18, "mm"),
+        show_row_dend = F,
+        show_column_dend = F,
+        rect_gp = gpar(col = "white"),
+        row_dend_width = unit(3, "cm"),
+        row_dend_gp = gpar(lwd =3),
+        heatmap_legend_param = list(
+        title_gp = gpar(fontsize = 25, fontface = "bold"),
+        labels_gp = gpar(fontsize = 25),
+        at = c(0, 1), 
+        labels = c("NO", "Yes"),
+        grid_width = unit(12, "mm"),
+        grid_height = unit(12, "mm"),
+        title_gap = unit(5, "mm"),
+        direction = "horizontal"),
+      row_names_gp = gpar(fontsize = 25),
+      row_names_side = "left",
+      column_names_gp = gpar(fontsize = 25),
+      column_title_gp = gpar(fontsize = 30, fontface = "bold"),
+      column_names_side = "top", column_title_side = "bottom",
+      column_title = "Approved drugs",
+      column_names_rot = 45
+      )
+
+#heat_m = ggplotify::as.ggplot(heat_m)
+  
+draw(heat_m_drug, heatmap_legend_side = "bottom")
+
+```
+
+```{r}
+
+svg(str_glue("{figurePath}Heatmap_IL1B_Macr_up_Genetic_OPT_Mac_Approved_drugs_2025.svg"), width = 45, height = 30)
+draw(heat_m_drug, heatmap_legend_side = "right")
+dev.off()
+
+
+```
+
+#### Tripartite plot
+
+```{r fig.width=32, fig.height=15}
+known_drugs_subnet_RA_CD_unique_approved_tripartite = known_drugs_subnet_RA_CD_unique_approved
+known_drugs_subnet_RA_CD_unique_approved_tripartite$indication = str_replace(known_drugs_subnet_RA_CD_unique_approved_tripartite$indication, " Positive", "+") %>%
+  str_to_sentence()
+
+create_tripartite_ggplot(
+  known_drugs_subnet_RA_CD_unique_approved_tripartite, 
+  drug_col = "drug_name", 
+  gene_col = "gene", 
+  indication_col = "indication",
+  weight_col = "phase_for_indication",
+  color_by = "drug_type", 
+  node_size = 4, label_size = 7.5,
+  text_size = 20,
+  pathwidth = 2,
+  text_face = "plain",
+  title = "Approved drug → Gene → Indication Colored by Drug"
+)
+
+ggsave(str_glue("{figurePath}Tripartite_plot_IL1B_Macr_up_Genetic_OPT_Mac_Approved_drugs_tripartite_2025.svg"), width = 32, height = 15, bg = "white")
+
+ggsave(str_glue("{figurePath}Tripartite_plot_IL1B_Macr_up_Genetic_OPT_Mac_Approved_drugs_tripartite_2025.png"), width = 32, height = 15, bg = "white")
+```
+
+### Phase 3 Drug → Gene → Indication
+
+```{r fig.width=35, fig.height=28}
+
+known_drugs_subnet_RA_CD_unique_phase3 = known_drugs_subnet_RA_CD_unique %>% 
+  select(gene, drug_name, drug_type, indication, phase_for_indication) %>% 
+  filter(phase_for_indication %in% (1:3)) %>% 
+  mutate(drug_gene = paste(drug_name, gene, sep = "->")) %>% unique() %>% mutate(value = 1)
+
+
+known_drugs_subnet_RA_CD_unique_approved_tripartite_phase3 = known_drugs_subnet_RA_CD_unique_phase3
+known_drugs_subnet_RA_CD_unique_approved_tripartite_phase3$indication = str_replace(known_drugs_subnet_RA_CD_unique_approved_tripartite_phase3$indication, " Positive", "+") %>%
+  str_to_sentence()
+
+known_drugs_subnet_RA_CD_unique_approved_tripartite_phase3$phase_for_indication2 = as.character(known_drugs_subnet_RA_CD_unique_approved_tripartite_phase3$phase_for_indication)
+
+create_tripartite_ggplot_2(
+  known_drugs_subnet_RA_CD_unique_approved_tripartite_phase3, 
+  drug_col = "drug_name", 
+  gene_col = "gene", 
+  indication_col = "indication",
+  weight_col = "phase_for_indication",
+  color_by = "phase_for_indication2",
+  color_name = "Phase for indication",
+  node_size = 4, label_size = 8.5,
+  custom_color = c("#1f77b4", "#2ca02c", "#d62728"),
+  text_size = 22,
+  pathwidth = 2,
+  text_face = "plain", line_alpha = 0.8,
+  title = "Drug → Gene → Indication - Colored by Drug (phase 1 to 3)"
+)
+
+ggsave(str_glue("{figurePath}Tripartite_plot_IL1B_Macr_up_Genetic_OPT_Mac_drugs_phase_1_to_3_tripartite_2025.svg"), width = 35, height = 28, bg = "white")
+
+ggsave(str_glue("{figurePath}Tripartite_plot_IL1B_Macr_up_Genetic_OPT_Mac_drugs_phase_1_to_3_tripartite_2025.png"), width = 35, height = 28, bg = "white")
+```
+
+```{r fig.fullwidth = TRUE, fig.width=2.5, fig.height=3.5}
+known_drugs_ori = known_drugs_subnet_RA_CD_unique %>% dplyr::select(gene, known_drugs) %>% 
+  mutate(known_drugs = case_when(known_drugs == "Known drugs" ~ "Yes", TRUE ~ "NO")) %>% 
+  unique() %>% dplyr::group_by(known_drugs) %>% 
+  dplyr::summarise(Count = n()) %>% dplyr::arrange(Count)
+
+barplot4netannot(
+  data = known_drugs_ori,
+  X = "known_drugs",
+  Y = "Count",
+  label = TRUE,
+  ylab = "Number of genes",
+  name = "Genes with \n known drug",
+  key.size = 0.4,
+  colmap = vega_20[11:12]
+)
+
+ggsave(str_glue("{figurePath}known_drugs_subnet_RA_CD_J_unique_2025.png"), bg='white')
+```
+
+```{r fig.fullwidth = TRUE, fig.width=3, fig.height=3.5}
+known_drugs_ori_2 = known_drugs_subnet_RA_CD_unique[known_drugs_subnet_RA_CD_unique$known_drugs == "Known drugs",] %>% 
+  unique() %>% dplyr::select(max_phase) %>% na.omit() %>% 
+  dplyr::group_by(max_phase) %>% 
+  dplyr::summarise(Count = n()) %>% dplyr::arrange(Count) %>% 
+  dplyr::mutate(max_phase = as.factor(max_phase))
+
+known_drugs_ori_2$max_phase = gsub(4, "Approved", known_drugs_ori_2$max_phase)
+
+barplot4netannot(
+  data = known_drugs_ori_2,
+  X = "max_phase",
+  Y = "Count",
+  label = TRUE,
+  name = "Clinical Trial",
+  key.size = 0.4,
+  colmap = vega_20
+)
+
+ggsave(str_glue("{figurePath}known_drugs_subnet_RA_CD_J_Phase_2025.png"), bg='transparent')
+```
+
+## Prioritize shared module
+
+```{r}
+
+subnet_RA_CD_priori = igraph::subgraph(graph = net, vids = (V(net)$Origin != "Intermediate"))
+
+#degree=igraph::degree(subnet_RA_CD_priori)
+
+#subnet_RA_CD_priori = set.vertex.attribute(graph=subnet_RA_CD_priori, name="degree", value=as.numeric(degree))
+
+#V(subnet_RA_CD_priori)$degree = degree
+
+#subnet_RA_CD_priori = igraph::subgraph(graph = subnet_RA_CD_priori, vids = (degree != 0))
+
+page.rank.net.priori = page_rank(
+  subnet_RA_CD_priori,
+  personalized = as.numeric(V(subnet_RA_CD_priori)$Score)
+)
+
+
+subnet_RA_CD_priori = set_vertex_attr(graph=subnet_RA_CD_priori, name="page.rank", value=page.rank.net.priori$vector)
+
+
+cwt.net.priori=cluster_walktrap(subnet_RA_CD_priori, 
+                           weights = E(subnet_RA_CD_priori)$weight, 
+                           steps = 5,
+                           merges = F,
+                           modularity = TRUE, 
+                           membership = TRUE)
+
+table(cwt.net.priori$membership)
+  
+
+subnet_RA_CD_priori = set_vertex_attr(graph=subnet_RA_CD_priori, name="cwt", value=as.factor(cwt.net.priori$membership))
+
+#degree=igraph::degree(subnet_RA_CD_priori)
+
+#subnet_RA_CD_priori = set_vertex_attr(graph=subnet_RA_CD_priori, name="degree", value=degree)
+
+
+#subnet_RA_CD_meta.priori = igraph::as_data_frame(subnet_RA_CD_priori, what = "vertices")
+
+class(V(subnet_RA_CD_priori))
+
+
+```
+
+```{r fig.fullwidth = TRUE, fig.width=8, fig.height=6}
+ggraph(subnet_RA_CD_priori, layout = "kk") +
+  geom_edge_link0(width=0.2, colour = "gray90") +
+  #scale_color_brewer(palette = "Paired") +
+  geom_edge_fan(aes(alpha = after_stat(index)), show.legend = FALSE) +
+  geom_node_point(aes(color = cwt, size = page.rank)) +
+  geom_node_text(aes(label = name), repel = T) +
+  theme_graph()
+```
+
+### Known drug targets
+
+```{r}
+
+known_drugs_subnet_RA_CD_priori = gene2knowndrugs(geneid = as_ids(V(subnet_RA_CD_priori)), ensId = FALSE)
+
+known_drugs_subnet_RA_CD_priori = unique(known_drugs_subnet_RA_CD_priori)
+```
+
+```{r}
+
+known_drugs_subnet_RA_CD_unique_priori = known_drugs_subnet_RA_CD_priori %>% mutate(known_drugs = case_when(is.na(drug_id) ~ "Unknown",                           TRUE ~ "Known drugs")  )  
+
+known_drugs_subnet_RA_CD_unique_priori = known_drugs_subnet_RA_CD_unique_priori[,c(1,3,5,8)]
+```
+
+```{r fig.fullwidth = TRUE, fig.width=2.5, fig.height=3.5}
+
+known_drugs_ori_priori = known_drugs_subnet_RA_CD_unique_priori %>% dplyr::select(gene.name, known_drugs) %>%
+  mutate(known_drugs = case_when(known_drugs == "Known drugs" ~ "Yes", TRUE ~ "NO")) %>%
+  unique() %>% dplyr::group_by(known_drugs) %>% 
+  dplyr::summarise(Count = n()) %>% dplyr::arrange(Count)  
+
+barplot4netannot(data = known_drugs_ori_priori, X = "known_drugs", Y = "Count", label = TRUE, ylab = "Number of genes", name = "Drugged genes", key.size = 0.4,   colmap = vega_20[11:12])
+
+#ggsave(str_glue("{figurePath}known_drugs_subnet_RA_CD_J_unique_prioritized.png"), bg='transparent')
+```
+
+```{r fig.fullwidth = TRUE, fig.width=3, fig.height=3.5}
+
+
+known_drugs_ori_2_priori = known_drugs_subnet_RA_CD_unique_priori[known_drugs_subnet_RA_CD_unique_priori$known_drugs == "Known drugs",] %>%
+  unique() %>% dplyr::select(ClinicalTrialPhase) %>% na.omit() %>%
+  dplyr::group_by(ClinicalTrialPhase) %>% 
+  dplyr::summarise(Count = n()) %>% dplyr::arrange(Count) %>% 
+  dplyr::mutate(ClinicalTrialPhase = as.factor(ClinicalTrialPhase))
+
+barplot4netannot(data = known_drugs_ori_2_priori, X = "ClinicalTrialPhase", Y = "Count", ylab = "Number of clinical trials", label = TRUE, name = "Clinical Trial\nPhase", key.size = 0.4, colmap = vega_20 )  
+
+#ggsave(str_glue("{figurePath}known_drugs_subnet_RA_CD_J_Phase_prioritized.png"), bg='transparent')
+```
+
+## Known drug targets all gene
+
+```{r}
+#library(biomaRt)
+#known_drugs_subnet_RA_CD = gene2knowndrugs(geneid = as_ids(V(net)), ensId = FALSE)
+
+
+known_drugs_subnet_RA_CD_all <- map_df(rownames(IL1B_macr_up_wide), function(g) {
+  Sys.sleep(0.5)
+  tryCatch(get_opentargets_comprehensive(g), error = function(e) {
+    message("  Error: ", e$message)
+    NULL
+  })
+})
+```
+
+## GSEA
+
+```{python}
+import os,sys
+import numpy as np
+import pandas as pd
+#import drug2cell as d2c
+#import scanpy as sc
+import sctk
+#import gc
+#sys.path.append("/mnt/c/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/scripts/autoimmuneSC/AIID_notebooks/")
+
+sys.path.append("C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/scripts/autoimmuneSC/AIID_notebooks/")
+
+from inflapy.immunoFunc import *
+import gseapy as gp
+```
+
+```{python}
+gp.get_library_name()
+```
+
+```{r}
+genelist = as_ids(V(net))
+```
+
+```{python}
+#gene_sets=['MSigDB_Hallmark_2020', 'Reactome_2022']
+genelist = r.genelist
+gene_sets=['MSigDB_Hallmark_2020']
+
+enr = gp.enrichr(gene_list=genelist,
+                     gene_sets=gene_sets,
+                     organism='human', 
+                     outdir=None, # don't write to disk
+                    )
+enr1 = enr.results
+enr1
+
+```
+
+```{r}
+enr1 = py$enr1
+
+```
+
+```{python}
+#gene_sets=['MSigDB_Hallmark_2020', 'Reactome_2022']
+genelist = r.genelist
+gene_sets=['Reactome_2022']
+
+enr = gp.enrichr(gene_list=genelist,
+                     gene_sets=gene_sets,
+                     organism='human', 
+                     outdir=None, # don't write to disk
+                    )
+enr2 = enr.results
+enr2
+```
+
+```{r}
+enr2 = py$enr2
+
+```
+
+```{r  fig.fullwidth = TRUE, fig.width=6, fig.height=2.5}
+gsea_plot(gsea=enr1, n_top = 10, x = "Term", y = "Adjusted P-value", log_y = F, bar_plot = TRUE, ylab="Adjusted P-value", xlab = "Hallmark GSEA")
+
+#ggsave(str_glue("{figurePath}GSEA_Bar_Tissue_IntermediateMacr_RA_CD_subgraph_Modules_Jaccard_index_Hallmark_2020.png"), bg='transparent', width=6, height=2.5)
+```
+
+```{r}
+enr2$Term = str_remove(enr2$Term, " R-HSA-.*$") %>% str_wrap(., 35)
+```
+
+```{r  fig.fullwidth = TRUE, fig.width=8, fig.height=4}
+gsea_plot(
+  gsea = enr2,
+  n_top = 10,
+  x = "Term",
+  y = "Adjusted P-value",
+  log_y = T,
+  bar_plot = TRUE,
+  ylab = "log2(Adjusted P-value)",
+  xlab = "Reactome")
+
+
+#ggsave(str_glue("{figurePath}GSEA_Bar_Tissue_IntermediateMacr_RA_CD_subgraph_Modules_Jaccard_index_Reactome.png"), bg='transparent',
+       #width=8, height=3.5)
+```
+
+## Save
+
+```{r}
+save.image("C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/sanger_gdrive/Projects/SCVI_Results/All_Tissue_or_Nonimmune/Subset_Reintegrated_full/Milo/individual_disease_nhoo/Tissue_Myeloid_NetExpansion_from_genetic_OPT_session_2025.RData")
+```
+
+```{r}
+#load("G:/My Drive/Projects/SCVI_Results/All_Tissue_or_Nonimmune/Subset_Reintegrated_full/Milo/individual_disease_nhoo/Tissue_Myeloid_NetExpansion_from_genetic_OPT_session.RData")
+
+load("C:/Users/bidos/OneDrive/Posdoc/bepe/Results_Sanger/sanger_gdrive/Projects/SCVI_Results/All_Tissue_or_Nonimmune/Subset_Reintegrated_full/Milo/individual_disease_nhoo/Tissue_Myeloid_NetExpansion_from_genetic_OPT_session_2025.RData")
+```
